@@ -59,6 +59,7 @@ type pageData struct {
 	Page, Title, Admin, Error, Search, Filter     string
 	Users                                         []userRow
 	User                                          userRow
+	SpeedMbps                                     int
 	TotalUsers, ActiveUsers                       int
 	Used, Allocated                               int64
 	Domains                                       []Domain
@@ -94,6 +95,7 @@ func attachAdmin(mux *http.ServeMux, cfg Config, reg *Registry) {
 
 func (a *admin) render(w http.ResponseWriter, status int, data pageData) {
 	data.Admin = a.cfg.Admin
+	data.SpeedMbps = SpeedMbps
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	if err := templates.ExecuteTemplate(w, "layout", data); err != nil {

@@ -102,7 +102,7 @@ To stop connections temporarily, disable the account in its details. Increasing 
 
 ### How traffic and domain activity work
 
-- A GB is 1,000,000,000 bytes. AtAvix counts uploads and downloads across both profiles, including VLESS headers and framing carried inside the WebSocket. Once the shared allowance is exhausted, open tunnels close and new connections are rejected. The dashboard and subscriptions read the current in-memory counter.
+- A GB is 1,000,000,000 bytes. AtAvix counts uploads and downloads across both profiles, including VLESS headers and framing carried inside the WebSocket. Once the shared allowance is exhausted, open tunnels close and new connections are rejected. The dashboard and subscriptions read the current in-memory counter. Each account shares a 20 Mbps speed limit across all of its tunnels and both traffic directions. A small burst lets short requests start immediately on an idle account.
 - Usage is checkpointed approximately once per second and saved on graceful shutdown. An abrupt crash can lose traffic recorded after the last successful checkpoint.
 - Domain activity is opt-in per account. Enable it with the user's knowledge and permission. AtAvix records only hostnames explicitly sent in direct VLESS requests, with the most recent observation time. IP-only requests and multiplexed connection destinations are absent, and no page paths or message contents are stored. Up to 100 recent domain names are retained for seven days and clearing the toggle removes current records.
 - WebSocket early data is disabled. Keep the imported WebSocket path and TLS settings as provided. Xray blocks private and reserved destinations and common outbound mail ports.

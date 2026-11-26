@@ -147,8 +147,8 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	release, ok := g.reg.connect(id, cancel)
-	if !ok {
+	limit, release := g.reg.connect(id, cancel)
+	if limit == nil {
 		return
 	}
 	defer release()
@@ -165,7 +165,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer stopCore()
 	core.SetReadLimit(8 << 20)
 	copy(header[1:17], g.internalID[:])
-	if !g.send(id, core, header, true) {
+	if !g.send(ctx, limit, id, core, header, true) {
 		return
 	}
 	g.reg.observe(id, host)
@@ -173,19 +173,19 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		g.relay(id, &wsReader{conn: core}, client, false)
+		g.relay(ctx, limit, id, &wsReader{conn: core}, client, false)
 		cancel()
 	}()
-	g.relay(id, in, core, true)
+	g.relay(ctx, limit, id, in, core, true)
 	cancel()
 	<-finished
 }
 
-func (g *Gateway) relay(id uuid.UUID, source io.Reader, target *websocket.Conn, upload bool) {
-	buffer := make([]byte, 32<<10)
+func (g *Gateway) relay(ctx context.Context, limit *bandwidth, id uuid.UUID, source io.Reader, target *websocket.Conn, upload bool) {
+	buffer := make([]byte, relayChunk)
 	for {
 		n, err := source.Read(buffer)
-		if n > 0 && !g.send(id, target, buffer[:n], upload) {
+		if n > 0 && !g.send(ctx, limit, id, target, buffer[:n], upload) {
 			return
 		}
 		if err != nil {
@@ -194,7 +194,10 @@ func (g *Gateway) relay(id uuid.UUID, source io.Reader, target *websocket.Conn, 
 	}
 }
 
-func (g *Gateway) send(id uuid.UUID, target *websocket.Conn, payload []byte, upload bool) bool {
+func (g *Gateway) send(ctx context.Context, limit *bandwidth, id uuid.UUID, target *websocket.Conn, payload []byte, upload bool) bool {
+	if err := limit.wait(ctx, len(payload)); err != nil {
+		return false
+	}
 	allowed, exhausted := g.reg.charge(id, len(payload), upload)
 	if allowed == 0 {
 		return false
