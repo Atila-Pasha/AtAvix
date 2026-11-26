@@ -1,0 +1,230 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>{{.Title}} · AtAvix</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+{{if eq .Page "login"}}
+  <main class="sign-in">
+    <div class="sign-in-card">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>AtAvix</span></div>
+      <h1>Sign in to AtAvix</h1>
+      <p class="secondary">Manage your users, quotas, and subscriptions.</p>
+      {{template "alert" .}}
+      <form class="stack" method="post" action="/admin/login">
+        <label>Username<input name="username" autocomplete="username" required autofocus></label>
+        <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+        <button class="button primary" type="submit">Sign in <span aria-hidden="true">→</span></button>
+      </form>
+    </div>
+  </main>
+{{else}}
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/admin/"><span class="brand-mark" aria-hidden="true"></span><span>AtAvix</span></a>
+      <nav aria-label="Main navigation">
+        <a href="/admin/" {{if eq .Page "dashboard"}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">▦</span>Overview</a>
+        <a href="/admin/users" {{if or (eq .Page "users") (eq .Page "detail") (eq .Page "new")}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">◎</span>Users</a>
+        <a href="/admin/settings" {{if eq .Page "settings"}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">⚙</span>Settings</a>
+      </nav>
+      <div class="account">
+        <span class="avatar account-avatar" aria-hidden="true">{{initial .Admin}}</span>
+        <div class="account-name"><strong>{{.Admin}}</strong><small>Administrator</small></div>
+        <form method="post" action="/admin/logout">
+          <button class="icon-button" aria-label="Sign out" title="Sign out"><span aria-hidden="true">↪</span></button>
+        </form>
+      </div>
+    </aside>
+    <main class="workspace">
+      {{if or (eq .Page "dashboard") (eq .Page "users")}}
+        {{template "directory" .}}
+      {{else if eq .Page "new"}}
+        <div class="backline"><a href="/admin/users">← All users</a></div>
+        <header class="page-heading"><h1>Add user</h1></header>
+        <section class="panel form-panel">
+          {{template "alert" .}}
+          {{template "createForm" .}}
+        </section>
+      {{else if eq .Page "detail"}}
+        {{template "detail" .}}
+      {{else}}
+        <header class="page-heading">
+          <div><h1>Settings</h1><p>Endpoints and storage for this installation.</p></div>
+        </header>
+        <section class="panel info-panel">
+          <h2>Installation</h2>
+          <dl class="info-list">
+            <div><dt>Admin panel</dt><dd>{{.PanelURL}}</dd></div>
+            <div><dt>Subscription base URL</dt><dd>{{.SubscriptionURL}}</dd></div>
+            <div><dt>VLESS endpoint</dt><dd>{{.ProxyURL}}</dd></div>
+            <div><dt>Database</dt><dd>{{.Database}}</dd></div>
+          </dl>
+          <p class="secondary">Edit the installation configuration and restart AtAvix to change these values.</p>
+        </section>
+      {{end}}
+    </main>
+  </div>
+  <div class="toast" role="status" aria-live="polite" hidden></div>
+{{end}}
+</body>
+</html>{{end}}
+
+{{define "alert"}}{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}{{end}}
+
+{{define "directory"}}
+  <header class="page-heading">
+    <div>
+      <h1>{{.Title}}</h1>
+      <p>{{if eq .Page "dashboard"}}Manage subscriptions and keep track of traffic across your users.{{else}}Search, create, and manage individual accounts.{{end}}</p>
+    </div>
+    <a class="button primary" href="/admin/users/new" data-dialog="add-user"><span class="plus" aria-hidden="true">+</span> Add user</a>
+  </header>
+  {{if eq .Page "dashboard"}}
+    <section class="hero" aria-labelledby="traffic-summary">
+      <div class="hero-decoration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><b></b><b></b><b></b></div>
+      <div class="hero-content">
+        <h2 id="traffic-summary"><span class="spark" aria-hidden="true">✧</span> Traffic usage</h2>
+        <div class="hero-value">{{bytes .Used}}</div>
+        {{if .Allocated}}
+          <p>of {{bytes .Allocated}} allocated across all users</p>
+          <progress value="{{.Used}}" max="{{.Allocated}}" aria-label="Total quota used"></progress>
+        {{else}}
+          <p>Traffic will appear when users connect.</p>
+          <progress value="0" max="1" aria-label="No quota allocated yet"></progress>
+        {{end}}
+      </div>
+    </section>
+    <section class="metrics" aria-label="User and traffic totals">
+      <div class="metric"><span class="metric-icon" aria-hidden="true">◎</span><div><span>Total users</span><strong>{{.TotalUsers}}</strong></div></div>
+      <div class="metric"><span class="metric-icon green" aria-hidden="true">◈</span><div><span>Active accounts</span><strong>{{.ActiveUsers}}</strong></div></div>
+      <div class="metric"><span class="metric-icon pink" aria-hidden="true">⇅</span><div><span>Allocated traffic</span><strong>{{bytes .Allocated}}</strong></div></div>
+    </section>
+  {{end}}
+  <section class="panel directory" aria-labelledby="directory-heading">
+    <div class="directory-head">
+      <div><h2 id="directory-heading">User directory <span class="count">{{.TotalUsers}}</span></h2><p>Find an account to view usage and manage its subscription.</p></div>
+      {{if eq .Page "dashboard"}}<a class="text-button" href="/admin/users">View all <span aria-hidden="true">↗</span></a>{{end}}
+    </div>
+    <form class="toolbar" method="get">
+      <label class="search"><span class="search-icon" aria-hidden="true"></span><input type="search" name="q" value="{{.Search}}" placeholder="Search by username…" aria-label="Search by username" maxlength="32"></label>
+      <label class="status-filter"><span class="visually-hidden">Account status</span><select name="status">
+        <option value="">All statuses</option>
+        <option value="active" {{if eq .Filter "active"}}selected{{end}}>Active</option>
+        <option value="paused" {{if eq .Filter "paused"}}selected{{end}}>Paused</option>
+        <option value="exhausted" {{if eq .Filter "exhausted"}}selected{{end}}>Exhausted</option>
+      </select></label>
+      <button class="button secondary-button" type="submit">Filter</button>
+      {{if or .Search .Filter}}<a class="text-button reset" href="{{if eq .Page "dashboard"}}/admin/{{else}}/admin/users{{end}}">Clear</a>{{end}}
+    </form>
+    {{if .Users}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">User</th><th scope="col">Status</th><th scope="col">Traffic used</th><th scope="col">Remaining</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody>
+        {{range .Users}}
+        <tr>
+          <td><a class="user-link" href="/admin/users/{{.ID}}"><span class="avatar" aria-hidden="true">{{initial .Username}}</span><span><strong>{{.Username}}</strong><small>{{.Remark}}</small></span></a></td>
+          <td><span class="status {{statusClass .Status}}">{{.Status}}</span></td>
+          <td><div class="row-usage"><progress value="{{.Used}}" max="{{.Quota}}" aria-label="{{.UsageLabel}}"></progress><span>{{bytes .Used}} <span class="muted">/ {{bytes .Quota}}</span></span></div></td>
+          <td><span class="remaining">{{bytes .Remaining}}</span></td>
+          <td class="row-actions"><button class="icon-button" type="button" data-copy="{{.Link}}" aria-label="Copy {{.Username}}'s subscription" title="Copy subscription"><span class="copy-icon" aria-hidden="true"></span></button><a class="icon-button" href="/admin/users/{{.ID}}" aria-label="Open {{.Username}}'s details" title="Open details"><span aria-hidden="true">↗</span></a></td>
+        </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="empty">
+      <span class="empty-icon" aria-hidden="true">◎</span>
+      {{if or .Search .Filter}}
+        <strong>No matching users</strong><p>Try another username or status.</p>
+      {{else}}
+        <strong>No users yet</strong><p>Add a user to create a subscription and set a quota.</p>
+        <a class="button secondary-button" href="/admin/users/new" data-dialog="add-user">Add your first user</a>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+  <dialog id="add-user" aria-labelledby="add-user-heading">
+    <header class="dialog-header"><h2 id="add-user-heading">Add user</h2><form method="dialog"><button class="icon-button" aria-label="Close" title="Close">×</button></form></header>
+    {{template "createForm" .}}
+  </dialog>
+{{end}}
+
+{{define "createForm"}}
+  <form action="/admin/users" method="post" class="stack">
+    <label>Username<input name="username" value="{{.User.Username}}" placeholder="e.g. alex" minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,31}" autocomplete="off" required></label>
+    <label>Connection remark<input name="remark" value="{{.User.Remark}}" placeholder="e.g. Alex · Primary" maxlength="80" required></label>
+    <label>Traffic quota (GB)<input name="quota" type="number" inputmode="decimal" min="0.000000001" max="1000000" step="any" value="{{if .User.Quota}}{{quota .User.Quota}}{{else}}10{{end}}" required></label>
+    <label class="toggle-row"><span><strong>Enable account</strong><small>Allow this user's profiles to connect.</small></span><input class="toggle" type="checkbox" name="enabled" {{if or (not .Error) .User.Enabled}}checked{{end}}></label>
+    <label class="toggle-row"><span><strong>Record domain activity</strong><small>Enable with the user's knowledge and permission.</small></span><input class="toggle" type="checkbox" name="track_domains" {{if .User.TrackDomains}}checked{{end}}></label>
+    <div class="form-actions"><button type="submit" class="button primary">Create user <span aria-hidden="true">→</span></button></div>
+  </form>
+{{end}}
+
+{{define "detail"}}
+  <div class="backline"><a href="/admin/users">← All users</a></div>
+  <header class="page-heading">
+    <div><h1>{{.User.Username}}</h1><p>{{.User.Remark}} <span class="middot">·</span> Added {{date .User.Created}}</p></div>
+    <span class="status {{statusClass .User.Status}}">{{.User.Status}}</span>
+  </header>
+  {{template "alert" .}}
+  <div class="detail-grid">
+    <section class="panel info-panel">
+      <h2>Traffic</h2>
+      <p class="detail-amount">{{bytes .User.Remaining}} <small>remaining</small></p>
+      <progress max="{{.User.Quota}}" value="{{.User.Used}}" aria-label="{{.User.UsageLabel}}"></progress>
+      <dl class="info-list">
+        <div><dt>Quota</dt><dd>{{bytes .User.Quota}}</dd></div>
+        <div><dt>Used</dt><dd>{{bytes .User.Used}}</dd></div>
+        <div><dt>Uploaded</dt><dd>{{bytes .User.Uploaded}}</dd></div>
+      </dl>
+    </section>
+    <section class="panel info-panel">
+      <h2>Subscription</h2>
+      <label class="field-label" for="subscription-link">Subscription link</label>
+      <div class="copy-field"><input type="text" id="subscription-link" readonly value="{{.User.Link}}"><button class="button secondary-button" type="button" data-copy="{{.User.Link}}">Copy link</button></div>
+      <label class="field-label" for="connection-uuid">Connection UUID</label>
+      <div class="copy-field"><input type="text" id="connection-uuid" readonly value="{{.User.ID}}"><button class="button secondary-button" type="button" data-copy="{{.User.ID}}">Copy UUID</button></div>
+    </section>
+    <section class="panel info-panel">
+      <h2>Account settings</h2>
+      <form action="/admin/users/{{.User.ID}}" method="post" class="stack">
+        <label>Username<input name="username" value="{{.User.Username}}" minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,31}" required></label>
+        <label>Connection remark<input name="remark" value="{{.User.Remark}}" maxlength="80" required></label>
+        <label>Traffic quota (GB)<input name="quota" type="number" inputmode="decimal" min="0.000000001" max="1000000" step="any" value="{{quota .User.Quota}}" required></label>
+        <label class="toggle-row"><span><strong>Enable account</strong><small>Pausing immediately closes open connections.</small></span><input class="toggle" type="checkbox" name="enabled" {{if .User.Enabled}}checked{{end}}></label>
+        <label class="toggle-row"><span><strong>Record domain activity</strong><small>Disabling this clears existing records.</small></span><input class="toggle" type="checkbox" name="track_domains" {{if .User.TrackDomains}}checked{{end}}></label>
+        <div class="form-actions"><button class="button primary" type="submit">Save changes</button></div>
+      </form>
+    </section>
+    <section class="panel info-panel activity">
+      <h2>Domain activity</h2>
+      {{if .User.TrackDomains}}
+        <p class="secondary">Domain names sent by the client. Last 7 days, up to 100 domains.</p>
+        {{if .Domains}}
+          <dl class="info-list">
+          {{range .Domains}}
+            <div><dt>{{.Hostname}}</dt><dd><time datetime="{{.Seen.Format "2006-01-02T15:04:05Z07:00"}}">{{.Seen.Format "Jan 2, 15:04"}} UTC</time></dd></div>
+          {{end}}
+          </dl>
+        {{else}}<p class="empty-note">No domain activity recorded.</p>{{end}}
+      {{else}}
+        <p class="empty-note">Domain tracking is off for this account.</p>
+      {{end}}
+    </section>
+  </div>
+  <div class="danger-row">
+    <a class="button danger-button" href="#delete-user" data-dialog="delete-user">Delete user</a>
+  </div>
+  <dialog id="delete-user" aria-labelledby="delete-user-heading">
+    <header class="dialog-header"><h2 id="delete-user-heading">Delete {{.User.Username}}?</h2><form method="dialog"><button class="icon-button" aria-label="Close">×</button></form></header>
+    <p class="secondary">This revokes the subscription and permanently removes the account and its activity.</p>
+    <form class="form-actions" action="/admin/users/{{.User.ID}}/delete" method="post"><button class="button danger-button" type="submit">Delete user</button></form>
+  </dialog>
+{{end}}

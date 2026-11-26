@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	TrustProxy                                bool
 	Addr, Driver, Database, CoreBinary, Admin string
 	PanelURL, SubscriptionURL, ProxyURL       *url.URL
 	PasswordHash                              []byte
@@ -18,7 +19,8 @@ type Config struct {
 
 func ReadConfig() (Config, error) {
 	cfg := Config{
-		Addr: env("HTTP_ADDR", "127.0.0.1:8080"), CoreBinary: env("XRAY_BIN", "xray"),
+		TrustProxy: env("TRUST_PROXY", "") == "true",
+		Addr:       env("HTTP_ADDR", "127.0.0.1:8080"), CoreBinary: env("XRAY_BIN", "xray"),
 		Admin: env("ADMIN_USERNAME", "admin"), Database: env("DATABASE_URL", "atavix.sqlite"),
 	}
 	cfg.Driver = "sqlite3"
