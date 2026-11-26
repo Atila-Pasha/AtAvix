@@ -78,13 +78,14 @@ func (u *userState) disconnect() {
 }
 
 type Registry struct {
-	db         *sql.DB
-	writeMu    sync.Mutex
-	mu         sync.Mutex
-	users      map[uuid.UUID]*userState
-	tokens     map[uuid.UUID]*userState
-	nextTunnel uint64
-	lastPrune  time.Time
+	db             *sql.DB
+	writeMu        sync.Mutex
+	mu             sync.Mutex
+	users          map[uuid.UUID]*userState
+	tokens         map[uuid.UUID]*userState
+	nextTunnel     uint64
+	lastPrune      time.Time
+	operatorRoutes []OperatorRoute
 }
 
 func OpenRegistry(ctx context.Context, driver, dsn string) (*Registry, error) {
@@ -101,6 +102,10 @@ func OpenRegistry(ctx context.Context, driver, dsn string) (*Registry, error) {
 	}
 	reg := &Registry{db: db, users: make(map[uuid.UUID]*userState), tokens: make(map[uuid.UUID]*userState)}
 	if err := reg.load(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := reg.loadOperatorRoutes(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}

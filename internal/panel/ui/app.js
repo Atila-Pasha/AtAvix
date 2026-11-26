@@ -36,3 +36,30 @@ function announce(message) {
   toast.hidden = false;
   toastTimeout = setTimeout(() => { toast.hidden = true; }, 2800);
 }
+
+const operatorRows = document.getElementById("operator-rows");
+if (operatorRows) {
+  const addOperator = document.querySelector("[data-add-operator]");
+  const template = document.getElementById("operator-row-template");
+
+  function updateOperatorLimit() {
+    addOperator.disabled = operatorRows.children.length >= Number(operatorRows.dataset.limit);
+  }
+
+  addOperator.addEventListener("click", () => {
+    if (addOperator.disabled) return;
+    operatorRows.append(template.content.cloneNode(true));
+    operatorRows.lastElementChild.querySelector("input").focus();
+    updateOperatorLimit();
+  });
+
+  operatorRows.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-remove-operator]");
+    if (!remove) return;
+    remove.closest(".operator-row").remove();
+    updateOperatorLimit();
+    addOperator.focus();
+  });
+
+  updateOperatorLimit();
+}

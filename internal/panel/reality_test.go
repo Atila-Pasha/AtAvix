@@ -69,7 +69,7 @@ func TestXrayReality(t *testing.T) {
 	defer gateway.Close()
 	go gateway.ServeRaw(raw)
 
-	uri, err := url.Parse(reality.profile(account.ID, input.Remark))
+	uri, err := url.Parse(reality.profileAt(reality.Public, account.ID, input.Remark))
 	if err != nil || uri.Fragment != input.Remark || strings.Contains(uri.String(), reality.privateKey) {
 		t.Fatal("invalid REALITY share URI or disclosure of private key")
 	}

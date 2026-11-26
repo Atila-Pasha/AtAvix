@@ -30,22 +30,24 @@ func subscriptionURL(base *url.URL, u User) string {
 	return base.JoinPath(u.Token.String()).String()
 }
 
-func profile(base *url.URL, u User, path, name string) string {
-	security := "none"
+func profileAddress(base *url.URL) string {
 	port := base.Port()
-	if base.Scheme == "https" {
-		security = "tls"
-		if port == "" {
+	if port == "" {
+		port = "80"
+		if base.Scheme == "https" {
 			port = "443"
 		}
-	} else if port == "" {
-		port = "80"
 	}
-	query := url.Values{"encryption": {"none"}, "security": {security}, "type": {"ws"}, "path": {path}, "host": {base.Host}}
-	if security == "tls" {
+	return net.JoinHostPort(base.Hostname(), port)
+}
+
+func profile(base *url.URL, u User, path, name string) string {
+	query := url.Values{"encryption": {"none"}, "security": {"none"}, "type": {"ws"}, "path": {path}, "host": {base.Host}}
+	if base.Scheme == "https" {
+		query.Set("security", "tls")
 		query.Set("sni", base.Hostname())
 	}
-	return shareURI(net.JoinHostPort(base.Hostname(), port), u.ID, query, name)
+	return shareURI(profileAddress(base), u.ID, query, name)
 }
 
 func shareURI(address string, id uuid.UUID, query url.Values, name string) string {
@@ -67,12 +69,7 @@ func serveSubscription(reg *Registry, base *url.URL, reality *Reality) http.Hand
 			http.NotFound(w, r)
 			return
 		}
-		mainProfile := profile(base, u, PrimaryPath, u.Remark)
-		if reality != nil {
-			mainProfile = reality.profile(u.ID, u.Remark)
-		}
-		body := mainProfile + "\n" +
-			profile(base, u, BalancePath, u.Username+"-"+FormatBytes(u.Remaining())) + "\n"
+		body := strings.Join(subscriptionProfiles(reg, base, reality, u), "\n") + "\n"
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=0", u.Uploaded, u.Used-u.Uploaded, u.Quota))
 		w.Header().Set("Profile-Update-Interval", "1")

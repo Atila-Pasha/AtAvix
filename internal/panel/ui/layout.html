@@ -68,6 +68,7 @@
           </dl>
           <p class="secondary">Edit the installation configuration and restart AtAvix to change these values.</p>
         </section>
+        {{template "operatorSettings" .}}
       {{end}}
     </main>
   </div>
@@ -229,4 +230,40 @@
     <p class="secondary">This revokes the subscription and permanently removes the account and its activity.</p>
     <form class="form-actions" action="/admin/users/{{.User.ID}}/delete" method="post"><button class="button danger-button" type="submit">Delete user</button></form>
   </dialog>
+{{end}}
+
+{{define "operatorSettings"}}
+  <section class="panel info-panel operator-panel" aria-labelledby="operator-heading">
+    <h2 id="operator-heading">Operator profiles</h2>
+    <p class="secondary">Add a route for each operator you have tested. A user with the remark “Home” sees a name like “Home (Irancell)”.</p>
+    <p class="secondary" id="operator-hint">Leave the public endpoint blank to use the installation endpoint. A custom endpoint must forward to this AtAvix instance.</p>
+    {{if .OperatorError}}<p class="alert" role="alert">{{.OperatorError}}</p>{{end}}
+    {{if .OperatorSaved}}<p class="save-notice" role="status">Operator profiles saved. Clients can refresh their subscriptions.</p>{{end}}
+    <form method="post" action="/admin/settings/operators" class="stack">
+      <div id="operator-rows" class="stack" data-limit="{{.MaxOperatorRoutes}}">
+        {{range .OperatorRoutes}}
+          {{template "operatorRow" .}}
+        {{else}}
+          {{template "operatorRow" .EmptyOperatorRoute}}
+        {{end}}
+      </div>
+      <template id="operator-row-template">{{template "operatorRow" .EmptyOperatorRoute}}</template>
+      <div class="operator-actions">
+        <button type="button" class="button secondary-button" data-add-operator><span class="plus" aria-hidden="true">+</span> Add operator</button>
+        <button type="submit" class="button primary">Save profiles</button>
+      </div>
+    </form>
+  </section>
+{{end}}
+
+{{define "operatorRow"}}
+  <div class="operator-row">
+    <label>Operator<input name="operator" value="{{.Operator}}" placeholder="e.g. Irancell" maxlength="40"></label>
+    <label>Transport<select name="transport">
+      <option value="ws" {{if eq .Transport "ws"}}selected{{end}}>WebSocket</option>
+      <option value="reality" {{if eq .Transport "reality"}}selected{{end}}>TCP + REALITY</option>
+    </select></label>
+    <label>Public endpoint<input name="endpoint" value="{{.Endpoint}}" placeholder="Default endpoint" maxlength="300" aria-describedby="operator-hint"></label>
+    <button class="icon-button" type="button" data-remove-operator aria-label="Remove operator route" title="Remove operator route">×</button>
+  </div>
 {{end}}

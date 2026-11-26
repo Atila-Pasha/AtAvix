@@ -100,10 +100,10 @@ func (r *Registry) InitializeReality(ctx context.Context, transport *Reality) er
 	return nil
 }
 
-func (r *Reality) profile(id uuid.UUID, name string) string {
+func (r *Reality) profileAt(address string, id uuid.UUID, name string) string {
 	query := url.Values{
 		"encryption": {"none"}, "security": {"reality"}, "type": {"tcp"},
 		"sni": {r.ServerName}, "fp": {"chrome"}, "pbk": {r.publicKey}, "sid": {r.shortID}, "spx": {"/"},
 	}
-	return shareURI(r.Public, id, query, name)
+	return shareURI(address, id, query, name)
 }

@@ -49,6 +49,13 @@ jobs:
           sudo ./main
           login
           [[ "$(curl -fsS -b "$cookie" "$detail" | sed -n 's/.*id="subscription-link" readonly value="\([^"]*\)".*/\1/p')" == "$link" ]]
+          curl -fsS -b "$cookie" -o /dev/null \
+            --data 'operator=Irancell&transport=ws&endpoint=' \
+            --data-urlencode 'operator=MCI' --data 'transport=ws' --data-urlencode 'endpoint=https://alt.example.com' \
+            "$base/admin/settings/operators"
+          profiles=$(curl -fsS "$link" | base64 --decode)
+          [[ "$(printf '%s\n' "$profiles" | wc -l)" == 3 ]]
+          [[ "$profiles" == *'#CI%20Primary%20%28Irancell%29'* && "$profiles" == *'#CI%20Primary%20%28MCI%29'* ]]
       - name: Validate Caddy and split-domain settings
         run: |
           set -euo pipefail
@@ -62,6 +69,13 @@ jobs:
           docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             -e ATAVIX_SITE_ADDRESSES -e ATAVIX_PANEL_DOMAIN -e ATAVIX_ACME_EMAIL \
             caddy:2.11.9-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Enable the direct listener on an existing installation
+        if: matrix.database == 'sqlite'
+        run: |
+          set -euo pipefail
+          printf '%s\n' 2 18080 https://panel.example.com https://sub.example.com yes 127.0.0.1 18443 panel.example.com | sudo ./main configure
+          curl -fsS http://127.0.0.1:18080/healthz -o /dev/null
+          timeout 3 bash -c '</dev/tcp/127.0.0.1/18443'
       - name: Show service logs on failure
         if: failure()
         run: timeout 5s sudo ./main logs || true

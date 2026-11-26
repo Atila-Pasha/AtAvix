@@ -5,7 +5,7 @@ AtAvix is a self-hosted control panel for VLESS subscriptions. The English-langu
 ## What you get
 
 - Add, search, edit, pause, or delete users. Set each user's quota in GB and choose a custom remark.
-- Share one subscription link per user. The primary profile uses your custom remark and prefers direct VLESS over TCP + REALITY when enabled. The WebSocket profile displays a name such as `alex-7.5 GB`, recalculated on every subscription refresh. All profiles share the same quota and speed limit.
+- Share one subscription link per user. The primary profile uses your custom remark and prefers direct VLESS over TCP + REALITY when enabled. The WebSocket profile displays a name such as `alex-7.5 GB`, recalculated on every subscription refresh. All profiles share the same quota and speed limit. You can publish additional routes with operator names in their remarks.
 - Use one hostname for everything or separate the admin panel and client connections, for example `https://panel.example.com/admin/` and `https://sub.example.com/<subscription-uuid>`.
 - Choose SQLite or a managed PostgreSQL container during setup.
 - Optionally record domain names for individual users. Tracking starts off and can be disabled or cleared independently for each account.
@@ -105,10 +105,21 @@ Existing installations can update with `git pull --ff-only` and `sudo ./main upd
 1. Open **Users → Add user**.
 2. Enter a unique username, a connection remark, and the traffic quota. Enter `10` for 10 GB. The panel generates the connection UUID and the separate subscription UUID automatically.
 3. Open the user's details and select **Copy link**. Share the link privately. Anyone with the link can download that user's connection credentials and consume the quota.
-4. Add the URL as a subscription group in **v2rayN**, or as a subscription in **v2rayNG**, then run the client's subscription update. It should import the primary remark and a second profile named `username-remaining`, such as `alex-10 GB`. Either profile can be selected for use.
-5. Update the subscription again after using it to refresh the remaining volume in the second name. The exact menu labels vary across client releases. Configure manual or scheduled updates in the client according to how often you want the name refreshed.
+4. Add the URL as a subscription group in **v2rayN**, or as a subscription in **v2rayNG**, then run the client's subscription update. The subscription imports your connection profiles and a profile named `username-remaining`, such as `alex-10 GB`. Any of these profiles can be selected for use.
+5. Update the subscription again after using it to refresh the remaining volume in the balance profile name. The exact menu labels vary across client releases. Configure manual or scheduled updates in the client according to how often you want the name refreshed.
 
 To stop connections temporarily, disable the account in its details. Increasing its quota allows an exhausted account to resume if enabled. Deleting an account disconnects it and revokes its link and profiles. Moving the public hostname changes the origin of existing subscription URLs, so send the new links to users.
+
+### Operator profiles
+
+Open **Settings → Operator profiles**. Test a route from a connection on the intended ISP before assigning that operator's name. Field observations can guide which routes to test and results can change with the server IP and network conditions.
+
+1. Enter the operator name, for example `Irancell` or `MCI`.
+2. Select **TCP + REALITY** for a direct connection or **WebSocket** for an HTTPS route. Leave **Public endpoint** empty to use the installation's endpoint for that transport.
+3. For an alternate path, enter a REALITY `hostname:port` or a WebSocket HTTPS origin. Alternate REALITY addresses must forward TCP to the same listener. Alternate WebSocket origins need valid certificates and must reverse-proxy `/connect` to this AtAvix instance.
+4. Select **Save profiles**. Existing subscription links pick up the changes at refresh. With remark `Home`, the client displays `Home (Irancell)` for that route. The balance profile keeps the `username-remaining` name.
+
+Routes are emitted in the order shown in Settings. Up to 12 operator profiles can be published, plus the balance profile. Each operator route needs a distinct combination of transport and endpoint. If REALITY is disabled, its operator profiles remain saved and are omitted until it is enabled. An empty operator list uses the installation's default profiles.
 
 ### How traffic and domain activity work
 
@@ -135,13 +146,14 @@ Use one AtAvix panel process per database. Configuration changes preserve the ch
 
 ### Back up and restore
 
-Backups contain connection credentials, traffic records, and any enabled domain activity. Store them privately.
+Backups contain connection credentials, the REALITY private key when enabled, traffic records, and any recorded domain activity. Store them privately.
 
 **SQLite**
 
 Stop the service for a consistent file backup. With the default Compose project name, the data volume is `atavix_atavix-data`.
 
 ```bash
+umask 077
 sudo ./main stop
 sudo docker run --rm -v atavix_atavix-data:/source:ro alpine:3.23 \
   tar -C /source -czf - . > atavix-sqlite.tar.gz
@@ -162,6 +174,7 @@ sudo ./main
 With PostgreSQL running, use the standard container `pg_dump` command. Add the Caddy override to the Compose command only if you need to manage the Caddy service.
 
 ```bash
+umask 077
 sudo docker compose -f compose.yaml -f compose.postgres.yaml exec -T postgres \
   pg_dump -U atavix -d atavix -Fc > atavix-postgres.dump
 ```
@@ -185,7 +198,7 @@ Preserve `.env` and `.atavix/admin-password` along with the database backup. The
 | Docker installation reports conflicting packages | Check Docker's official install guide for your distribution. |
 | Certificate has not issued | Check the hostnames point to the server, ports 80 and 443 are reachable, and no other service has bound those ports. |
 | A client imports both profiles but cannot connect | Check the user is active with quota left, the URI points to the public proxy host, and the reverse proxy supports WebSockets. |
-| The second profile still has the previous balance | Update the subscription in the client. The name is generated when the link is fetched. |
+| The balance profile still shows the previous volume | Update the subscription in the client. The name is generated when the link is fetched. |
 | The user has no domain activity | Check that tracking is enabled and the client forwards domain names rather than IP addresses or multiplexed requests. Give the checkpoint a moment to record the latest connection. |
 
 [Docker Engine for Debian](https://docs.docker.com/engine/install/debian/) · [Docker Engine for Ubuntu](https://docs.docker.com/engine/install/ubuntu/) · [Docker Compose plugin](https://docs.docker.com/compose/install/linux/) · [Xray VLESS share-link format](https://github.com/XTLS/Xray-core/discussions/716)

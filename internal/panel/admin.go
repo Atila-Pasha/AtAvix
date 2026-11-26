@@ -64,6 +64,11 @@ type pageData struct {
 	Used, Allocated                                                int64
 	Domains                                                        []Domain
 	PanelURL, SubscriptionURL, ProxyURL, Database, RealityEndpoint string
+	OperatorRoutes                                                 []OperatorRoute
+	OperatorError                                                  string
+	OperatorSaved                                                  bool
+	MaxOperatorRoutes                                              int
+	EmptyOperatorRoute                                             OperatorRoute
 }
 
 type userRow struct {
@@ -91,6 +96,7 @@ func attachAdmin(mux *http.ServeMux, cfg Config, reg *Registry) {
 	mux.HandleFunc("POST /admin/users/{id}", a.restrict(a.update))
 	mux.HandleFunc("POST /admin/users/{id}/delete", a.restrict(a.remove))
 	mux.HandleFunc("GET /admin/settings", a.restrict(a.settings))
+	mux.HandleFunc("POST /admin/settings/operators", a.restrict(a.saveOperators))
 }
 
 func (a *admin) render(w http.ResponseWriter, status int, data pageData) {
@@ -381,7 +387,13 @@ func formError(err error) (int, string) {
 	}
 }
 
-func (a *admin) settings(w http.ResponseWriter, _ *http.Request) {
+func (a *admin) settings(w http.ResponseWriter, r *http.Request) {
+	data := a.settingsPage(a.reg.OperatorRoutes())
+	data.OperatorSaved = r.URL.Query().Get("operators") == "saved"
+	a.render(w, http.StatusOK, data)
+}
+
+func (a *admin) settingsPage(routes []OperatorRoute) pageData {
 	database := "SQLite"
 	if a.cfg.Driver == "pgx" {
 		database = "PostgreSQL"
@@ -390,8 +402,38 @@ func (a *admin) settings(w http.ResponseWriter, _ *http.Request) {
 	if a.cfg.Reality != nil {
 		realityEndpoint = a.cfg.Reality.Public
 	}
-	a.render(w, http.StatusOK, pageData{Page: "settings", Title: "Settings", PanelURL: a.cfg.PanelURL.String(),
-		SubscriptionURL: a.cfg.SubscriptionURL.String(), ProxyURL: a.cfg.ProxyURL.String(), Database: database, RealityEndpoint: realityEndpoint})
+	return pageData{Page: "settings", Title: "Settings", PanelURL: a.cfg.PanelURL.String(),
+		SubscriptionURL: a.cfg.SubscriptionURL.String(), ProxyURL: a.cfg.ProxyURL.String(), Database: database,
+		RealityEndpoint: realityEndpoint, OperatorRoutes: routes, MaxOperatorRoutes: maxOperatorRoutes}
+}
+
+func (a *admin) saveOperators(w http.ResponseWriter, r *http.Request) {
+	if !readForm(w, r) {
+		return
+	}
+	names, transports, endpoints := r.PostForm["operator"], r.PostForm["transport"], r.PostForm["endpoint"]
+	if len(names) != len(transports) || len(names) != len(endpoints) || len(names) > maxOperatorRoutes {
+		http.Error(w, "Invalid operator routes", http.StatusBadRequest)
+		return
+	}
+	routes := make([]OperatorRoute, len(names))
+	for i, name := range names {
+		routes[i] = OperatorRoute{Operator: name, Transport: transports[i], Endpoint: endpoints[i]}
+	}
+	data := a.settingsPage(routes)
+	valid, err := validateOperatorRoutes(routes, a.cfg)
+	if err != nil {
+		data.OperatorError = err.Error()
+		a.render(w, http.StatusUnprocessableEntity, data)
+		return
+	}
+	if err := a.reg.saveOperatorRoutes(r.Context(), valid); err != nil {
+		slog.Error("Save operator routes", "error", err)
+		data.OperatorError = "Could not save the operator profiles. Try again."
+		a.render(w, http.StatusInternalServerError, data)
+		return
+	}
+	http.Redirect(w, r, "/admin/settings?operators=saved", http.StatusSeeOther)
 }
 
 func (u userRow) UsageLabel() string {
