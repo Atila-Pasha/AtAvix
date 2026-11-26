@@ -15,6 +15,7 @@ type Config struct {
 	Addr, Driver, Database, CoreBinary, Admin string
 	PanelURL, SubscriptionURL, ProxyURL       *url.URL
 	PasswordHash                              []byte
+	Reality                                   *Reality
 }
 
 func ReadConfig() (Config, error) {
@@ -40,6 +41,10 @@ func ReadConfig() (Config, error) {
 		if err != nil {
 			return cfg, fmt.Errorf("%s: %w", item.name, err)
 		}
+	}
+	cfg.Reality, err = readReality()
+	if err != nil {
+		return cfg, err
 	}
 	if !usernamePattern.MatchString(cfg.Admin) {
 		return cfg, errors.New("ADMIN_USERNAME must contain 3–32 letters, numbers, dots, dashes or underscores")

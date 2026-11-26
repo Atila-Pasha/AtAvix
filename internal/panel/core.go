@@ -3,6 +3,7 @@ package panel
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -22,7 +23,7 @@ type Core struct {
 	err        error
 }
 
-func StartCore(ctx context.Context, binary string) (*Core, error) {
+func StartCore(ctx context.Context, binary string, reality *Reality, forwardPort int) (*Core, error) {
 	dir, err := os.MkdirTemp("", "atavix-")
 	if err != nil {
 		return nil, err
@@ -30,7 +31,28 @@ func StartCore(ctx context.Context, binary string) (*Core, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	exited := make(chan struct{})
 	core := &Core{Socket: filepath.Join(dir, "xray.sock"), InternalID: uuid.New(), Done: exited, cancel: cancel, dir: dir}
-	config := fmt.Sprintf(xrayConfig, core.Socket, core.InternalID.String())
+
+	var ingress string
+	if reality != nil {
+		data, err := json.Marshal(map[string]any{
+			"listen": reality.listenHost, "port": reality.listenPort, "protocol": "tunnel",
+			"settings": map[string]any{"allowedNetwork": "tcp", "rewriteAddress": "127.0.0.1", "rewritePort": forwardPort},
+			"streamSettings": map[string]any{
+				"network": "raw", "security": "reality",
+				"realitySettings": map[string]any{
+					"target": reality.Target, "serverNames": []string{reality.ServerName},
+					"privateKey": reality.privateKey, "shortIds": []string{reality.shortID},
+				},
+			},
+		})
+		if err != nil {
+			cancel()
+			os.RemoveAll(dir)
+			return nil, err
+		}
+		ingress = "," + string(data)
+	}
+	config := fmt.Sprintf(xrayConfig, core.Socket, core.InternalID.String(), ingress)
 	path := filepath.Join(dir, "xray.json")
 	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
 		cancel()
@@ -40,6 +62,10 @@ func StartCore(ctx context.Context, binary string) (*Core, error) {
 
 	var output bytes.Buffer
 	cmd := exec.CommandContext(ctx, binary, "run", "-config", path)
+	if reality != nil {
+		// The tunnel inbound must keep REALITY encryption on its downlink.
+		cmd.Env = append(os.Environ(), "xray.buf.splice=disable")
+	}
 	cmd.Stdout, cmd.Stderr = &output, &output
 	if err := cmd.Start(); err != nil {
 		cancel()
@@ -92,9 +118,8 @@ const xrayConfig = `{
   "inbounds": [{
     "listen": %q,
     "protocol": "vless",
-    "settings": {"decryption": "none", "clients": [{"id": %q}]},
-    "streamSettings": {"network": "websocket", "wsSettings": {"path": "/internal"}}
-  }],
+    "settings": {"decryption": "none", "clients": [{"id": %q}]}
+  }%s],
   "outbounds": [{
     "protocol": "freedom",
     "settings": {"finalRules": [{"action": "block", "network": "tcp", "port": "25,465,587", "blockDelay": "0"}]},

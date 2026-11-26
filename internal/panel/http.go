@@ -13,7 +13,7 @@ func NewHandler(cfg Config, reg *Registry, gateway *Gateway) http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.Handle("GET /{token}", serveSubscription(reg, cfg.ProxyURL))
+	mux.Handle("GET /{token}", serveSubscription(reg, cfg.ProxyURL, cfg.Reality))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 	})

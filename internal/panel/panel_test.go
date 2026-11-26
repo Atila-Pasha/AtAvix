@@ -53,7 +53,7 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 	}
 	base, _ := url.Parse("https://sub.example.org")
 	mux := http.NewServeMux()
-	mux.Handle("GET /{token}", serveSubscription(reg, base))
+	mux.Handle("GET /{token}", serveSubscription(reg, base, nil))
 	read := func(key uuid.UUID) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, httptest.NewRequest("GET", "/"+key.String(), nil))
@@ -162,7 +162,7 @@ func TestXrayTunnel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core, err := StartCore(ctx, binary)
+	core, err := StartCore(ctx, binary, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestXrayTunnel(t *testing.T) {
 			if err := client.WriteMessage(websocket.BinaryMessage, request[10:]); err != nil {
 				t.Fatal(err)
 			}
-			transport := &testTransport{Conn: client.UnderlyingConn(), socket: client, reader: wsReader{conn: client}, header: true}
+			transport := &testTransport{Conn: client.UnderlyingConn(), socket: client, reader: wsStream{Conn: client}, header: true}
 			conn := tls.Client(transport, &tls.Config{ServerName: "example.com", MinVersion: tls.VersionTLS12})
 			defer conn.Close()
 			if _, err := fmt.Fprint(conn, "GET / HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n"); err != nil {
@@ -220,7 +220,7 @@ func TestXrayTunnel(t *testing.T) {
 type testTransport struct {
 	net.Conn
 	socket *websocket.Conn
-	reader wsReader
+	reader wsStream
 	header bool
 }
 

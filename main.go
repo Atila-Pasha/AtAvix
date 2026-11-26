@@ -36,7 +36,20 @@ func run(ctx context.Context) error {
 	}
 	defer reg.Close()
 
-	core, err := panel.StartCore(context.Background(), cfg.CoreBinary)
+	var raw net.Listener
+	var forwardPort int
+	if cfg.Reality != nil {
+		if err := reg.InitializeReality(startup, cfg.Reality); err != nil {
+			return err
+		}
+		raw, err = net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			return err
+		}
+		defer raw.Close()
+		forwardPort = raw.Addr().(*net.TCPAddr).Port
+	}
+	core, err := panel.StartCore(context.Background(), cfg.CoreBinary, cfg.Reality, forwardPort)
 	if err != nil {
 		return err
 	}
@@ -62,6 +75,13 @@ func run(ctx context.Context) error {
 	}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
+	var rawServed <-chan error
+	if raw != nil {
+		done := make(chan error, 1)
+		rawServed = done
+		go func() { done <- gateway.ServeRaw(raw) }()
+		slog.Info("REALITY is enabled", "endpoint", cfg.Reality.Public)
+	}
 	slog.Info("AtAvix is listening", "address", listener.Addr(), "panel", cfg.PanelURL)
 
 	select {
@@ -69,6 +89,10 @@ func run(ctx context.Context) error {
 	case <-core.Done:
 		err = core.Err()
 	case err = <-served:
+	case err = <-rawServed:
+	}
+	if raw != nil {
+		raw.Close()
 	}
 	gateway.Close()
 	shutdown, cancel := context.WithTimeout(context.Background(), 8*time.Second)

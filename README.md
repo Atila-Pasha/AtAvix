@@ -5,7 +5,7 @@ AtAvix is a self-hosted control panel for VLESS subscriptions. The English-langu
 ## What you get
 
 - Add, search, edit, pause, or delete users. Set each user's quota in GB and choose a custom remark.
-- Share one subscription link per user. It imports two VLESS over WebSocket profiles with the same quota. The first uses your custom remark. The second displays a name such as `alex-7.5 GB`, recalculated on every subscription refresh.
+- Share one subscription link per user. The primary profile uses your custom remark and prefers direct VLESS over TCP + REALITY when enabled. The WebSocket profile displays a name such as `alex-7.5 GB`, recalculated on every subscription refresh. All profiles share the same quota and speed limit.
 - Use one hostname for everything or separate the admin panel and client connections, for example `https://panel.example.com/admin/` and `https://sub.example.com/<subscription-uuid>`.
 - Choose SQLite or a managed PostgreSQL container during setup.
 - Optionally record domain names for individual users. Tracking starts off and can be disabled or cleared independently for each account.
@@ -36,7 +36,7 @@ sudo ./main
 The installer detects Docker and Compose and offers to install them if either is missing on Debian or Ubuntu. It builds the panel, downloads the pinned Xray release, and verifies its SHA-256 checksum.
 
 1. Select **SQLite** for a single-file database or **PostgreSQL** for a separate database container. The wizard creates the PostgreSQL password automatically and keeps its port private.
-2. Select an access mode from the options below.
+2. Select an access mode from the options below. In either public mode you can enable the direct REALITY listener.
 3. Enter an administrator username and a password of 12–72 bytes. The installer writes configuration to `.env` and stores the password in the restricted `.atavix/admin-password` file. Back up both securely.
 4. Open the printed panel URL and sign in. The first build can take several minutes.
 
@@ -90,6 +90,16 @@ ssh -N -L 8080:127.0.0.1:8080 user@your-server
 
 Open `http://127.0.0.1:8080/admin/` on the workstation. Use the chosen port in both places if you changed it. Subscriptions in local mode are usable by clients with access to that loopback endpoint, such as a client on your workstation using the SSH tunnel. Run `sudo ./main configure` when you have a public HTTPS endpoint.
 
+### Direct TCP + REALITY
+
+The public installer offers a primary VLESS profile served directly over TCP + REALITY. Use a DNS-only hostname or an IP that reaches the server directly, and allow the chosen TCP port through the server and provider firewalls. The default is 8443 when the panel's automatic HTTPS listener uses 443. Use 443 for REALITY when it is free on the server. The HTTPS subscription and WebSocket fallback continue to use the configured web endpoint.
+
+For the REALITY TLS cover hostname, use a TLS 1.3 site that you control with HTTP/2 enabled, ideally on the same host or near the server. The automatic Caddy setup can use its own panel or subscription hostname. In that mode the direct profile becomes usable after Caddy has obtained the certificate. A TLS cover hostname is separate from the public address that clients connect to. AtAvix generates and stores the X25519 identity and short ID in the database, so normal restarts preserve existing profiles.
+
+Direct TCP avoids WebSocket framing and a CDN hop. Field reports from Iran show that reachability and latency vary by network, server IP, and route. Compare both profiles from the actual ISP at the times your users connect. In your client, repeat the connection delay test and compare typical latency, slow outliers, and failures. [Iran network field measurements](https://github.com/saroo98/iran-network-field-guide) · [Iran connection quality measurements](https://radar.cloudflare.com/quality/ir) · [Xray REALITY documentation](https://xtls.github.io/en/config/transports/reality.html)
+
+Existing installations can update with `git pull --ff-only` and `sudo ./main update`. Then run `sudo ./main configure` to enable REALITY and refresh subscriptions in the clients.
+
 ## Create and share a subscription
 
 1. Open **Users → Add user**.
@@ -102,7 +112,7 @@ To stop connections temporarily, disable the account in its details. Increasing 
 
 ### How traffic and domain activity work
 
-- A GB is 1,000,000,000 bytes. AtAvix counts uploads and downloads across both profiles, including VLESS headers and framing carried inside the WebSocket. Once the shared allowance is exhausted, open tunnels close and new connections are rejected. The dashboard and subscriptions read the current in-memory counter. Each account shares a 20 Mbps speed limit across all of its tunnels and both traffic directions. A small burst lets short requests start immediately on an idle account.
+- A GB is 1,000,000,000 bytes. AtAvix counts uploads and downloads across both profiles, including VLESS headers and tunneled framing. Once the shared allowance is exhausted, open tunnels close and new connections are rejected. The dashboard and subscriptions read the current in-memory counter. Each account shares a 20 Mbps speed limit across all of its tunnels and both traffic directions. A small burst lets short requests start immediately on an idle account.
 - Usage is checkpointed approximately once per second and saved on graceful shutdown. An abrupt crash can lose traffic recorded after the last successful checkpoint.
 - Domain activity is opt-in per account. Enable it with the user's knowledge and permission. AtAvix records only hostnames explicitly sent in direct VLESS requests, with the most recent observation time. IP-only requests and multiplexed connection destinations are absent, and no page paths or message contents are stored. Up to 100 recent domain names are retained for seven days and clearing the toggle removes current records.
 - WebSocket early data is disabled. Keep the imported WebSocket path and TLS settings as provided. Xray blocks private and reserved destinations and common outbound mail ports.
@@ -204,6 +214,8 @@ This uses `http://127.0.0.1:8080/admin/`, the `admin` username, and `atavix.sqli
 | `PROXY_URL` | Origin embedded in VLESS profiles. Defaults to `SUBSCRIPTION_URL` |
 | `DATABASE_URL` | SQLite path or PostgreSQL connection URL |
 | `XRAY_BIN` | Xray executable |
+| `REALITY_PUBLIC`, `REALITY_SERVER_NAME` | Enable REALITY with a public `host:port` and cover TLS hostname |
+| `REALITY_LISTEN`, `REALITY_TARGET` | Listener IP and port (default `0.0.0.0:8443`) and cover address (default `REALITY_SERVER_NAME:443`) |
 | `TRUST_PROXY` | Enable only behind a trusted reverse proxy that overwrites `X-Atavix-Client-IP` |
 
-Run `go test ./...` for the SQLite and subscription tests. Set `TEST_POSTGRES_URL` to run the accounting test against a disposable PostgreSQL database. Set `XRAY_TEST_BINARY` to run a real VLESS connection test against `example.com`.
+Run `go test ./...` for the SQLite and subscription tests. Set `TEST_POSTGRES_URL` to run the accounting test against a disposable PostgreSQL database. Set `XRAY_TEST_BINARY` to run both the WebSocket and REALITY connection tests against `example.com`.

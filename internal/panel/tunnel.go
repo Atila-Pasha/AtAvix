@@ -22,7 +22,6 @@ import (
 const (
 	PrimaryPath = "/connect"
 	BalancePath = "/balance"
-	corePath    = "/internal"
 )
 
 var hostnameLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -46,11 +45,15 @@ func profile(base *url.URL, u User, path, name string) string {
 	if security == "tls" {
 		query.Set("sni", base.Hostname())
 	}
-	link := url.URL{Scheme: "vless", User: url.User(u.ID.String()), Host: net.JoinHostPort(base.Hostname(), port), RawQuery: query.Encode()}
+	return shareURI(net.JoinHostPort(base.Hostname(), port), u.ID, query, name)
+}
+
+func shareURI(address string, id uuid.UUID, query url.Values, name string) string {
+	link := url.URL{Scheme: "vless", User: url.User(id.String()), Host: address, RawQuery: query.Encode()}
 	return link.String() + "#" + strings.ReplaceAll(url.QueryEscape(name), "+", "%20")
 }
 
-func serveSubscription(reg *Registry, base *url.URL) http.HandlerFunc {
+func serveSubscription(reg *Registry, base *url.URL, reality *Reality) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
@@ -64,7 +67,11 @@ func serveSubscription(reg *Registry, base *url.URL) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		body := profile(base, u, PrimaryPath, u.Remark) + "\n" +
+		mainProfile := profile(base, u, PrimaryPath, u.Remark)
+		if reality != nil {
+			mainProfile = reality.profile(u.ID, u.Remark)
+		}
+		body := mainProfile + "\n" +
 			profile(base, u, BalancePath, u.Username+"-"+FormatBytes(u.Remaining())) + "\n"
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=0", u.Uploaded, u.Used-u.Uploaded, u.Quota))
@@ -76,7 +83,7 @@ func serveSubscription(reg *Registry, base *url.URL) http.HandlerFunc {
 type Gateway struct {
 	reg        *Registry
 	internalID uuid.UUID
-	upstream   websocket.Dialer
+	socket     string
 	upgrader   websocket.Upgrader
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -88,15 +95,9 @@ type Gateway struct {
 func NewGateway(reg *Registry, socket string, internalID uuid.UUID) *Gateway {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Gateway{
-		reg: reg, internalID: internalID,
-		upstream: websocket.Dialer{
-			HandshakeTimeout: 5 * time.Second,
-			NetDialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var dialer net.Dialer
-				return dialer.DialContext(ctx, "unix", socket)
-			},
-		},
-		ctx: ctx, cancel: cancel, slots: make(chan struct{}, 1024),
+		reg: reg, socket: socket, internalID: internalID,
+		upgrader: websocket.Upgrader{HandshakeTimeout: 5 * time.Second},
+		ctx:      ctx, cancel: cancel, slots: make(chan struct{}, 1024),
 	}
 }
 
@@ -107,43 +108,77 @@ func (g *Gateway) Close() {
 	g.running.Wait()
 }
 
+func (g *Gateway) reserve() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.ctx.Err() != nil {
+		return false
+	}
+	select {
+	case g.slots <- struct{}{}:
+		g.running.Add(1)
+		return true
+	default:
+		return false
+	}
+}
+
+func (g *Gateway) release() {
+	<-g.slots
+	g.running.Done()
+}
+
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !websocket.IsWebSocketUpgrade(r) || r.Header.Get("Sec-WebSocket-Protocol") != "" {
 		http.NotFound(w, r)
 		return
 	}
-	g.mu.Lock()
-	if g.ctx.Err() != nil {
-		g.mu.Unlock()
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	select {
-	case g.slots <- struct{}{}:
-	default:
-		g.mu.Unlock()
+	if !g.reserve() {
 		http.Error(w, "Service busy", http.StatusServiceUnavailable)
 		return
 	}
-	g.running.Add(1)
-	g.mu.Unlock()
-	defer g.running.Done()
-	defer func() { <-g.slots }()
-
+	defer g.release()
 	client, err := g.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
+	client.SetReadLimit(8 << 20)
+	g.tunnel(&wsStream{Conn: client})
+}
+
+// The raw listener accepts streams from Xray after it terminates REALITY.
+func (g *Gateway) ServeRaw(listener net.Listener) error {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			return err
+		}
+		if !g.reserve() {
+			conn.Close()
+			continue
+		}
+		go func() {
+			defer g.release()
+			g.tunnel(conn)
+		}()
+	}
+}
+
+type tunnelStream interface {
+	io.ReadWriteCloser
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
+func (g *Gateway) tunnel(client tunnelStream) {
 	defer client.Close()
 	ctx, cancel := context.WithCancel(g.ctx)
 	defer cancel()
 	stopClient := context.AfterFunc(ctx, func() { client.Close() })
 	defer stopClient()
 
-	client.SetReadLimit(8 << 20)
 	client.SetReadDeadline(time.Now().Add(10 * time.Second))
-	in := &wsReader{conn: client}
-	header, id, host, err := readVLESSHeader(in)
+	header, id, host, err := readVLESSHeader(client)
 	if err != nil {
 		return
 	}
@@ -153,17 +188,14 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	client.SetReadDeadline(time.Time{})
-	core, response, err := g.upstream.DialContext(ctx, "ws://localhost"+corePath, nil)
+	dialer := net.Dialer{Timeout: 5 * time.Second}
+	core, err := dialer.DialContext(ctx, "unix", g.socket)
 	if err != nil {
-		if response != nil {
-			response.Body.Close()
-		}
 		return
 	}
 	defer core.Close()
 	stopCore := context.AfterFunc(ctx, func() { core.Close() })
 	defer stopCore()
-	core.SetReadLimit(8 << 20)
 	copy(header[1:17], g.internalID[:])
 	if !g.send(ctx, limit, id, core, header, true) {
 		return
@@ -173,28 +205,35 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		g.relay(ctx, limit, id, &wsReader{conn: core}, client, false)
+		g.relay(ctx, limit, id, core, client, false)
 		cancel()
 	}()
-	g.relay(ctx, limit, id, in, core, true)
+	if err := g.relay(ctx, limit, id, client, core, true); err == io.EOF {
+		// A TCP client may finish sending and still expect a reply.
+		if _, raw := client.(net.Conn); raw {
+			core.(*net.UnixConn).CloseWrite()
+			<-finished
+			return
+		}
+	}
 	cancel()
 	<-finished
 }
 
-func (g *Gateway) relay(ctx context.Context, limit *bandwidth, id uuid.UUID, source io.Reader, target *websocket.Conn, upload bool) {
+func (g *Gateway) relay(ctx context.Context, limit *bandwidth, id uuid.UUID, source io.Reader, target tunnelStream, upload bool) error {
 	buffer := make([]byte, relayChunk)
 	for {
 		n, err := source.Read(buffer)
 		if n > 0 && !g.send(ctx, limit, id, target, buffer[:n], upload) {
-			return
+			return io.ErrClosedPipe
 		}
 		if err != nil {
-			return
+			return err
 		}
 	}
 }
 
-func (g *Gateway) send(ctx context.Context, limit *bandwidth, id uuid.UUID, target *websocket.Conn, payload []byte, upload bool) bool {
+func (g *Gateway) send(ctx context.Context, limit *bandwidth, id uuid.UUID, target tunnelStream, payload []byte, upload bool) bool {
 	if err := limit.wait(ctx, len(payload)); err != nil {
 		return false
 	}
@@ -203,22 +242,22 @@ func (g *Gateway) send(ctx context.Context, limit *bandwidth, id uuid.UUID, targ
 		return false
 	}
 	target.SetWriteDeadline(time.Now().Add(15 * time.Second))
-	err := target.WriteMessage(websocket.BinaryMessage, payload[:allowed])
+	_, err := target.Write(payload[:allowed])
 	if exhausted {
 		g.reg.stopExhausted(id)
 	}
 	return err == nil && !exhausted
 }
 
-type wsReader struct {
-	conn  *websocket.Conn
+type wsStream struct {
+	*websocket.Conn
 	frame io.Reader
 }
 
-func (r *wsReader) Read(p []byte) (int, error) {
+func (r *wsStream) Read(p []byte) (int, error) {
 	for {
 		if r.frame == nil {
-			kind, frame, err := r.conn.NextReader()
+			kind, frame, err := r.NextReader()
 			if err != nil {
 				return 0, err
 			}
@@ -237,6 +276,13 @@ func (r *wsReader) Read(p []byte) (int, error) {
 		}
 		return n, err
 	}
+}
+
+func (r *wsStream) Write(payload []byte) (int, error) {
+	if err := r.WriteMessage(websocket.BinaryMessage, payload); err != nil {
+		return 0, err
+	}
+	return len(payload), nil
 }
 
 // Read only the VLESS request header. The rest of the tunnel remains opaque.

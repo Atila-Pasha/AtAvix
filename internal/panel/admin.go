@@ -56,14 +56,14 @@ type loginAttempt struct {
 }
 
 type pageData struct {
-	Page, Title, Admin, Error, Search, Filter     string
-	Users                                         []userRow
-	User                                          userRow
-	SpeedMbps                                     int
-	TotalUsers, ActiveUsers                       int
-	Used, Allocated                               int64
-	Domains                                       []Domain
-	PanelURL, SubscriptionURL, ProxyURL, Database string
+	Page, Title, Admin, Error, Search, Filter                      string
+	Users                                                          []userRow
+	User                                                           userRow
+	SpeedMbps                                                      int
+	TotalUsers, ActiveUsers                                        int
+	Used, Allocated                                                int64
+	Domains                                                        []Domain
+	PanelURL, SubscriptionURL, ProxyURL, Database, RealityEndpoint string
 }
 
 type userRow struct {
@@ -386,8 +386,12 @@ func (a *admin) settings(w http.ResponseWriter, _ *http.Request) {
 	if a.cfg.Driver == "pgx" {
 		database = "PostgreSQL"
 	}
+	realityEndpoint := "Disabled"
+	if a.cfg.Reality != nil {
+		realityEndpoint = a.cfg.Reality.Public
+	}
 	a.render(w, http.StatusOK, pageData{Page: "settings", Title: "Settings", PanelURL: a.cfg.PanelURL.String(),
-		SubscriptionURL: a.cfg.SubscriptionURL.String(), ProxyURL: a.cfg.ProxyURL.String(), Database: database})
+		SubscriptionURL: a.cfg.SubscriptionURL.String(), ProxyURL: a.cfg.ProxyURL.String(), Database: database, RealityEndpoint: realityEndpoint})
 }
 
 func (u userRow) UsageLabel() string {

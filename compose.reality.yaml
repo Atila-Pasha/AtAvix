@@ -1,0 +1,9 @@
+services:
+  panel:
+    environment:
+      REALITY_LISTEN: 0.0.0.0:8443
+      REALITY_PUBLIC: ${ATAVIX_REALITY_PUBLIC:?Set a public REALITY endpoint}
+      REALITY_SERVER_NAME: ${ATAVIX_REALITY_SNI:?Set a REALITY TLS hostname}
+      REALITY_TARGET: ${ATAVIX_REALITY_TARGET:?Set a REALITY TLS target}
+    ports:
+      - "${ATAVIX_REALITY_PORT:?Set a public REALITY TCP port}:8443/tcp"
