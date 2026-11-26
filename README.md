@@ -205,7 +205,7 @@ Preserve `.env` and `.atavix/admin-password` along with the database backup. The
 
 ## Run from source
 
-Use Go 1.26.8 or later, a C compiler for the SQLite driver, and Xray 26.11.9 on Linux.
+Use Go 1.26.11 or later, a C compiler for the SQLite driver, and Xray 26.11.9 on Linux.
 
 ```bash
 mkdir -p .atavix
