@@ -1,0 +1,6 @@
+.env
+.atavix/
+bin/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
