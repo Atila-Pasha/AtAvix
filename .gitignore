@@ -4,3 +4,6 @@ bin/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+.env.*
+atavix-sqlite.tar.gz
+atavix-postgres.dump

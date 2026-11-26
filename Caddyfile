@@ -1,0 +1,27 @@
+{
+	admin off
+	email {$ATAVIX_ACME_EMAIL}
+}
+
+(atavix_backend) {
+	reverse_proxy panel:8080 {
+		header_up X-Atavix-Client-IP {remote_host}
+	}
+}
+
+{$ATAVIX_SITE_ADDRESSES} {
+	@panel host {$ATAVIX_PANEL_DOMAIN}
+	@public path_regexp public ^/(connect|balance|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$
+
+	handle @panel {
+		import atavix_backend
+	}
+
+	handle @public {
+		import atavix_backend
+	}
+
+	handle {
+		respond 404
+	}
+}

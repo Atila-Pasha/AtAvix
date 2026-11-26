@@ -46,8 +46,8 @@ func profile(base *url.URL, u User, path, name string) string {
 	if security == "tls" {
 		query.Set("sni", base.Hostname())
 	}
-	link := url.URL{Scheme: "vless", User: url.User(u.ID.String()), Host: net.JoinHostPort(base.Hostname(), port), RawQuery: query.Encode(), Fragment: name}
-	return link.String()
+	link := url.URL{Scheme: "vless", User: url.User(u.ID.String()), Host: net.JoinHostPort(base.Hostname(), port), RawQuery: query.Encode()}
+	return link.String() + "#" + strings.ReplaceAll(url.QueryEscape(name), "+", "%20")
 }
 
 func serveSubscription(reg *Registry, base *url.URL) http.HandlerFunc {

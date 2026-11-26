@@ -1,0 +1,39 @@
+name: atavix
+services:
+  panel:
+    build: .
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 25s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      ADMIN_USERNAME: ${ATAVIX_ADMIN_USERNAME:?Run ./main first}
+      ADMIN_PASSWORD_FILE: /run/secrets/atavix-admin-password
+      DATABASE_URL: ${ATAVIX_DATABASE_URL:-/data/atavix.sqlite}
+      HTTP_ADDR: 0.0.0.0:8080
+      PANEL_URL: ${ATAVIX_PANEL_URL:?Run ./main first}
+      SUBSCRIPTION_URL: ${ATAVIX_SUB_URL:?Run ./main first}
+      PROXY_URL: ${ATAVIX_PROXY_URL:?Run ./main first}
+      TRUST_PROXY: ${ATAVIX_TRUST_PROXY:-false}
+    volumes:
+      - atavix-data:/data
+      - type: bind
+        source: ./.atavix/admin-password
+        target: /run/secrets/atavix-admin-password
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+volumes:
+  atavix-data:

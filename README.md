@@ -1,0 +1,209 @@
+# AtAvix
+
+AtAvix is a self-hosted control panel for VLESS subscriptions. The English-language dashboard uses a black and violet theme and gives each user a separate quota, connection UUID, and private subscription link.
+
+## What you get
+
+- Add, search, edit, pause, or delete users. Set each user's quota in GB and choose a custom remark.
+- Share one subscription link per user. It imports two VLESS over WebSocket profiles with the same quota. The first uses your custom remark. The second displays a name such as `alex-7.5 GB`, recalculated on every subscription refresh.
+- Use one hostname for everything or separate the admin panel and client connections, for example `https://panel.example.com/admin/` and `https://sub.example.com/<subscription-uuid>`.
+- Choose SQLite or a managed PostgreSQL container during setup.
+- Optionally record domain names for individual users. Tracking starts off and can be disabled or cleared independently for each account.
+
+## Requirements
+
+- A Linux server on x86-64 or ARM64 with root or sudo access. Automatic Docker installation uses the official Docker repository on Debian and Ubuntu. Other Linux distributions can run AtAvix with a working Docker Engine, Compose plugin with `up --wait` support, and Bash installed.
+- Git, an outbound internet connection, and enough space to build the image. Allow about 2 GB of RAM and 5 GB of free disk for the first build. The runtime footprint is smaller.
+- For automatic public HTTPS, a DNS hostname and inbound TCP ports 80 and 443. Allow UDP 443 if you want HTTP/3. Keep your SSH port accessible when changing firewall rules.
+
+## Install
+
+On Debian or Ubuntu, install Git if needed.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git
+```
+
+Clone the project on the server and run the wizard.
+
+```bash
+git clone https://github.com/Atila-Pasha/AtAvix.git
+cd AtAvix
+sudo ./main
+```
+
+The installer detects Docker and Compose and offers to install them if either is missing on Debian or Ubuntu. It builds the panel, downloads the pinned Xray release, and verifies its SHA-256 checksum.
+
+1. Select **SQLite** for a single-file database or **PostgreSQL** for a separate database container. The wizard creates the PostgreSQL password automatically and keeps its port private.
+2. Select an access mode from the options below.
+3. Enter an administrator username and a password of 12–72 bytes. The installer writes configuration to `.env` and stores the password in the restricted `.atavix/admin-password` file. Back up both securely.
+4. Open the printed panel URL and sign in. The first build can take several minutes.
+
+### Option 1 · Automatic public HTTPS
+
+1. Create an `A` record for each hostname at your DNS provider. Point both records to the server's public IPv4 address. Add `AAAA` records only if the host accepts inbound connections over IPv6. For the initial setup, use DNS-only records if your provider has a proxy switch.
+2. Allow inbound TCP ports 80 and 443 in the server firewall and any cloud security group or router. If a web server is already using those ports, use option 2.
+3. Enter the admin hostname, such as `panel.example.com`. Accept the same hostname for subscriptions or enter another, such as `sub.atilapasha.ir`, if you control its DNS. Enter an email address for certificate registration.
+4. Wait for Caddy to issue a certificate, then open `https://panel.example.com/admin/`. Separate subscription hosts serve subscriptions and WebSocket endpoints.
+
+Automatic HTTPS renews certificates using the Caddy data volume. For certificate failures, check DNS resolution, the firewall, and `sudo ./main logs`. [Caddy automatic HTTPS documentation](https://caddyserver.com/docs/automatic-https)
+
+### Option 2 · Existing HTTPS reverse proxy
+
+Enter the localhost port for the backend and the public HTTPS origins. Point your reverse proxy to `127.0.0.1:<port>`. Preserve the incoming `Host` and allow WebSocket upgrades on `/connect` and `/balance`. Keep subscription responses uncached and exclude their URL paths from access logs.
+
+This example belongs inside the matching Nginx TLS server block. Configure a valid certificate for each public hostname.
+
+```nginx
+location / {
+    access_log off;
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Atavix-Client-IP $remote_addr;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_read_timeout 150s;
+    proxy_buffering off;
+}
+```
+
+Add the upgrade map once to Nginx's `http` block.
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+```
+
+Once your reverse proxy overwrites `X-Atavix-Client-IP` as shown, you can add `ATAVIX_TRUST_PROXY=true` to `.env` and run `sudo ./main`. This makes sign-in rate limits apply to individual client IPs.
+
+### Option 3 · Local access or SSH tunnel
+
+This option binds the panel to loopback. For a remote server, run this on your workstation and leave the SSH session open.
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@your-server
+```
+
+Open `http://127.0.0.1:8080/admin/` on the workstation. Use the chosen port in both places if you changed it. Subscriptions in local mode are usable by clients with access to that loopback endpoint, such as a client on your workstation using the SSH tunnel. Run `sudo ./main configure` when you have a public HTTPS endpoint.
+
+## Create and share a subscription
+
+1. Open **Users → Add user**.
+2. Enter a unique username, a connection remark, and the traffic quota. Enter `10` for 10 GB. The panel generates the connection UUID and the separate subscription UUID automatically.
+3. Open the user's details and select **Copy link**. Share the link privately. Anyone with the link can download that user's connection credentials and consume the quota.
+4. Add the URL as a subscription group in **v2rayN**, or as a subscription in **v2rayNG**, then run the client's subscription update. It should import the primary remark and a second profile named `username-remaining`, such as `alex-10 GB`. Either profile can be selected for use.
+5. Update the subscription again after using it to refresh the remaining volume in the second name. The exact menu labels vary across client releases. Configure manual or scheduled updates in the client according to how often you want the name refreshed.
+
+To stop connections temporarily, disable the account in its details. Increasing its quota allows an exhausted account to resume if enabled. Deleting an account disconnects it and revokes its link and profiles. Moving the public hostname changes the origin of existing subscription URLs, so send the new links to users.
+
+### How traffic and domain activity work
+
+- A GB is 1,000,000,000 bytes. AtAvix counts uploads and downloads across both profiles, including VLESS headers and framing carried inside the WebSocket. Once the shared allowance is exhausted, open tunnels close and new connections are rejected. The dashboard and subscriptions read the current in-memory counter.
+- Usage is checkpointed approximately once per second and saved on graceful shutdown. An abrupt crash can lose traffic recorded after the last successful checkpoint.
+- Domain activity is opt-in per account. Enable it with the user's knowledge and permission. AtAvix records only hostnames explicitly sent in direct VLESS requests, with the most recent observation time. IP-only requests and multiplexed connection destinations are absent, and no page paths or message contents are stored. Up to 100 recent domain names are retained for seven days and clearing the toggle removes current records.
+- WebSocket early data is disabled. Keep the imported WebSocket path and TLS settings as provided. Xray blocks private and reserved destinations and common outbound mail ports.
+
+## Operate the service
+
+Run commands from the checkout.
+
+| Task | Command |
+| --- | --- |
+| Start, or resume after a failed setup | `sudo ./main` |
+| Show container status | `sudo ./main status` |
+| Follow recent logs | `sudo ./main logs` |
+| Stop services and retain data | `sudo ./main stop` |
+| Change the access mode or public hostnames | `sudo ./main configure` |
+| Change the administrator password | `sudo ./main password` |
+| Update from GitHub | `git pull --ff-only`, followed by `sudo ./main update` |
+
+Use one AtAvix panel process per database. Configuration changes preserve the chosen database. The wizard does not migrate data between SQLite and PostgreSQL.
+
+### Back up and restore
+
+Backups contain connection credentials, traffic records, and any enabled domain activity. Store them privately.
+
+**SQLite**
+
+Stop the service for a consistent file backup. With the default Compose project name, the data volume is `atavix_atavix-data`.
+
+```bash
+sudo ./main stop
+sudo docker run --rm -v atavix_atavix-data:/source:ro alpine:3.23 \
+  tar -C /source -czf - . > atavix-sqlite.tar.gz
+sudo ./main
+```
+
+To restore, first stop the target installation and back up its current volume. Restore to an empty target volume or clear the target database files after making a backup.
+
+```bash
+sudo ./main stop
+sudo docker run --rm -i -v atavix_atavix-data:/target alpine:3.23 \
+  tar -C /target -xzf - < atavix-sqlite.tar.gz
+sudo ./main
+```
+
+**PostgreSQL**
+
+With PostgreSQL running, use the standard container `pg_dump` command. Add the Caddy override to the Compose command only if you need to manage the Caddy service.
+
+```bash
+sudo docker compose -f compose.yaml -f compose.postgres.yaml exec -T postgres \
+  pg_dump -U atavix -d atavix -Fc > atavix-postgres.dump
+```
+
+Restore to an empty installation with the panel stopped and the database running.
+
+```bash
+sudo docker compose -f compose.yaml -f compose.postgres.yaml stop panel
+sudo docker compose -f compose.yaml -f compose.postgres.yaml up -d --wait postgres
+sudo docker compose -f compose.yaml -f compose.postgres.yaml exec -T postgres \
+  pg_restore --exit-on-error -U atavix -d atavix < atavix-postgres.dump
+sudo ./main
+```
+
+Preserve `.env` and `.atavix/admin-password` along with the database backup. The password file is owned by container UID 10001 and should stay readable by that UID. Preserve the Caddy volumes when moving an installation if you want to retain issued certificates.
+
+### Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Docker installation reports conflicting packages | Check Docker's official install guide for your distribution. |
+| Certificate has not issued | Check the hostnames point to the server, ports 80 and 443 are reachable, and no other service has bound those ports. |
+| A client imports both profiles but cannot connect | Check the user is active with quota left, the URI points to the public proxy host, and the reverse proxy supports WebSockets. |
+| The second profile still has the previous balance | Update the subscription in the client. The name is generated when the link is fetched. |
+| The user has no domain activity | Check that tracking is enabled and the client forwards domain names rather than IP addresses or multiplexed requests. Give the checkpoint a moment to record the latest connection. |
+
+[Docker Engine for Debian](https://docs.docker.com/engine/install/debian/) · [Docker Engine for Ubuntu](https://docs.docker.com/engine/install/ubuntu/) · [Docker Compose plugin](https://docs.docker.com/compose/install/linux/) · [Xray VLESS share-link format](https://github.com/XTLS/Xray-core/discussions/716)
+
+## Run from source
+
+Use Go 1.26.8 or later, a C compiler for the SQLite driver, and Xray 26.11.9 on Linux.
+
+```bash
+mkdir -p .atavix
+chmod 700 .atavix
+read -r -s -p 'Local admin password (12–72 bytes): ' admin_password; printf '\n'
+(umask 077; printf '%s' "$admin_password" > .atavix/admin-password)
+unset admin_password
+go run .
+```
+
+This uses `http://127.0.0.1:8080/admin/`, the `admin` username, and `atavix.sqlite` by default. Set `XRAY_BIN` to the path to the Xray binary if it is outside your `PATH`.
+
+| Variable | Purpose |
+| --- | --- |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD_FILE` | Admin username and path to the password file |
+| `HTTP_ADDR` | HTTP bind address |
+| `PANEL_URL` | Public admin origin |
+| `SUBSCRIPTION_URL` | Origin used for subscription links. Defaults to `PANEL_URL` |
+| `PROXY_URL` | Origin embedded in VLESS profiles. Defaults to `SUBSCRIPTION_URL` |
+| `DATABASE_URL` | SQLite path or PostgreSQL connection URL |
+| `XRAY_BIN` | Xray executable |
+| `TRUST_PROXY` | Enable only behind a trusted reverse proxy that overwrites `X-Atavix-Client-IP` |
+
+Run `go test ./...` for the SQLite and subscription tests. Set `TEST_POSTGRES_URL` to run the accounting test against a disposable PostgreSQL database. Set `XRAY_TEST_BINARY` to run a real VLESS connection test against `example.com`.

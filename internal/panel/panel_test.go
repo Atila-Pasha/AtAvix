@@ -33,7 +33,7 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 	}
 	defer reg.Close()
 	name := "member-" + uuid.NewString()[:8]
-	input := UserInput{Username: name, Remark: "Studio · North", Quota: 10_000_000_000, Enabled: true, TrackDomains: true}
+	input := UserInput{Username: name, Remark: "Studio + North", Quota: 10_000_000_000, Enabled: true, TrackDomains: true}
 	u, err := reg.Save(ctx, uuid.Nil, input)
 	if err != nil {
 		t.Fatal(err)

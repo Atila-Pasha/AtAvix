@@ -1,0 +1,21 @@
+services:
+  panel:
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: atavix
+      POSTGRES_USER: atavix
+      POSTGRES_PASSWORD: ${ATAVIX_POSTGRES_PASSWORD:?PostgreSQL password is missing}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "atavix", "-d", "atavix"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  postgres-data:

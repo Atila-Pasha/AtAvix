@@ -1,0 +1,309 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export LC_ALL=C
+umask 077
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
+usage() {
+    cat <<'HELP'
+AtAvix installer and service manager
+  sudo ./main             Set up AtAvix or start an existing installation
+  sudo ./main configure   Change panel and subscription endpoints
+  sudo ./main status      Show the service status
+  sudo ./main logs        Follow service logs
+  sudo ./main update      Rebuild after a git pull
+  sudo ./main stop        Stop services and retain data
+  sudo ./main password    Set a new administrator password
+HELP
+}
+
+die() {
+    printf 'Error: %s\n' "$*" >&2
+    exit 1
+}
+
+prompt() {
+    local message=$1 default=${2:-}
+    if [[ -n "$default" ]]; then message+=" [$default]"; fi
+    read -r -p "$message: " REPLY || die "Setup cancelled."
+    REPLY=${REPLY:-$default}
+}
+
+yes_no() {
+    prompt "$1 [y/N]"
+    [[ ${REPLY,,} == y || ${REPLY,,} == yes ]]
+}
+
+setting() {
+    local line
+    line=$(sed -n "s/^$1=//p" .env)
+    line=${line#\'}
+    printf '%s' "${line%\'}"
+}
+
+install_docker() {
+    [[ -r /etc/os-release ]] || die "Install Docker Engine and the Compose plugin first."
+    # shellcheck source=/dev/null
+    source /etc/os-release
+    [[ "$ID" == debian || "$ID" == ubuntu ]] || die "Automatic Docker installation supports Debian and Ubuntu. Install Docker Engine and the Compose plugin first."
+    local distro=$ID codename=${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}
+    [[ -n "$codename" ]] || die "The distribution codename is missing."
+    yes_no "Install Docker Engine and the Compose plugin from Docker's official repository?" || die "Docker and Compose are required."
+    apt-get update
+    apt-get install -y ca-certificates curl
+    install -m 0755 -d /etc/apt/keyrings
+    if [[ ! -s /etc/apt/keyrings/docker.asc ]]; then
+        curl -fsSL "https://download.docker.com/linux/$distro/gpg" -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+    fi
+    if [[ ! -e /etc/apt/sources.list.d/docker.sources && ! -e /etc/apt/sources.list.d/docker.list ]]; then
+        cat > /etc/apt/sources.list.d/docker.sources <<APT
+Types: deb
+URIs: https://download.docker.com/linux/$distro
+Suites: $codename
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+APT
+        chmod 0644 /etc/apt/sources.list.d/docker.sources
+    fi
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable --now docker
+}
+
+ensure_docker() {
+    if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
+        install_docker
+    fi
+    docker info >/dev/null 2>&1 || die "Docker is unavailable. Start the Docker service and retry."
+    [[ $(docker compose up --help) == *--wait* ]] || die "Update the Docker Compose plugin to a version with up --wait."
+}
+
+valid_domain() {
+    local name=$1 label
+    [[ ${#name} -le 253 && "$name" == *.* && "$name" != .* && "$name" != *. && "$name" != *..* ]] || return 1
+    local -a labels
+    IFS=. read -r -a labels <<< "$name"
+    for label in "${labels[@]}"; do
+        [[ "$label" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || return 1
+    done
+}
+
+valid_port() {
+    [[ "$1" =~ ^[1-9][0-9]{0,4}$ ]] && (( $1 <= 65535 ))
+}
+
+ask_domain() {
+    local message=$1 default=${2:-}
+    while true; do
+        prompt "$message" "$default"
+        REPLY=${REPLY,,}
+        if valid_domain "$REPLY" && [[ ! "$REPLY" =~ ^[0-9.]+$ ]]; then return; fi
+        printf 'Enter a DNS hostname such as sub.example.com.\n'
+    done
+}
+
+ask_https() {
+    local message=$1 default=${2:-}
+    while true; do
+        prompt "$message" "$default"
+        REPLY=${REPLY,,}
+        if [[ "$REPLY" =~ ^https://([a-z0-9.-]+)(:([0-9]{1,5}))?$ ]]; then
+            local host=${BASH_REMATCH[1]} port=${BASH_REMATCH[3]}
+            if valid_domain "$host" && { [[ -z "$port" ]] || valid_port "$port"; }; then return; fi
+        fi
+        printf 'Enter an HTTPS origin such as https://sub.example.com.\n'
+    done
+}
+
+ask_password() {
+    local password confirmation next
+    while true; do
+        read -r -s -p 'Administrator password (12–72 bytes): ' password || die "Password entry cancelled."
+        printf '\n'
+        if (( ${#password} < 12 || ${#password} > 72 )); then
+            printf 'Use a password between 12 and 72 bytes.\n'
+            continue
+        fi
+        read -r -s -p 'Confirm password: ' confirmation || die "Password entry cancelled."
+        printf '\n'
+        if [[ "$password" == "$confirmation" ]]; then break; fi
+        printf 'Passwords did not match.\n'
+    done
+    install -m 0700 -d .atavix
+    next=$(mktemp .atavix/admin-password.XXXXXX)
+    printf '%s' "$password" > "$next"
+    chown 10001:10001 "$next"
+    chmod 0400 "$next"
+    mv -f -- "$next" .atavix/admin-password
+}
+
+configure_endpoints() {
+    local default_mode=1 default_panel='' default_sub=''
+    if [[ -f .env ]]; then
+        case $(setting ATAVIX_INSTALL_MODE) in
+            automatic) default_mode=1 ;;
+            external) default_mode=2 ;;
+            local) default_mode=3 ;;
+        esac
+        default_panel=$(setting ATAVIX_PANEL_URL)
+        default_sub=$(setting ATAVIX_SUB_URL)
+    fi
+    printf '\nAccess modes\n  1) Public HTTPS with Caddy and automatic certificates\n  2) Public HTTPS behind an existing reverse proxy\n  3) Local or SSH access\n'
+    while true; do
+        prompt "Choose access mode" "$default_mode"
+        case "$REPLY" in
+            1) access=automatic; break ;;
+            2) access=external; break ;;
+            3) access=local; break ;;
+        esac
+        printf 'Choose 1, 2, or 3.\n'
+    done
+    panel_domain=''
+    site_addresses=''
+    acme_email=''
+    port=8080
+    trust_proxy=false
+    if [[ "$access" == automatic ]]; then
+        if [[ "$default_mode" != 1 ]]; then default_panel=''; fi
+        ask_domain "Admin panel hostname" "${default_panel#https://}"; panel_domain=$REPLY
+        local suggested_sub=$panel_domain
+        if [[ "$default_mode" == 1 && -n "$default_sub" ]]; then suggested_sub=${default_sub#https://}; fi
+        ask_domain "Subscription and connection hostname" "$suggested_sub"; local sub_domain=$REPLY
+        panel_url="https://$panel_domain"
+        sub_url="https://$sub_domain"
+        site_addresses=$panel_domain
+        if [[ "$sub_domain" != "$panel_domain" ]]; then site_addresses+=", $sub_domain"; fi
+        local previous_email=''
+        if [[ -f .env ]]; then previous_email=$(setting ATAVIX_ACME_EMAIL); fi
+        while true; do
+            prompt "Email for HTTPS certificate registration" "$previous_email"
+            if [[ "$REPLY" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then acme_email=$REPLY; break; fi
+            printf 'Enter a valid email address.\n'
+        done
+        printf 'Point %s to this server and allow inbound TCP 80 and 443 before requesting certificates.\n' "$site_addresses"
+    else
+        local previous_port=8080
+        if [[ -f .env ]]; then previous_port=$(setting ATAVIX_PORT); fi
+        while true; do
+            prompt "Local listen port" "${previous_port:-8080}"
+            if valid_port "$REPLY"; then port=$REPLY; break; fi
+            printf 'Enter a port from 1 to 65535.\n'
+        done
+        if [[ "$access" == external ]]; then
+            if [[ "$default_mode" != 2 ]]; then default_panel=''; default_sub=''; fi
+            if [[ "$default_mode" == 2 && -f .env && $(setting ATAVIX_TRUST_PROXY) == true ]]; then
+                trust_proxy=true
+            fi
+            ask_https "Public admin panel URL" "$default_panel"; panel_url=$REPLY
+            ask_https "Public subscription and connection URL" "${default_sub:-$panel_url}"; sub_url=$REPLY
+            printf 'Configure your reverse proxy to forward HTTPS and WebSocket requests to 127.0.0.1:%s.\n' "$port"
+        else
+            panel_url="http://127.0.0.1:$port"
+            sub_url=$panel_url
+        fi
+    fi
+}
+
+save_settings() {
+    local next
+    next=$(mktemp .env.XXXXXX)
+    cat > "$next" <<SETTINGS
+ATAVIX_INSTALL_MODE=$access
+ATAVIX_DB=$db
+ATAVIX_ADMIN_USERNAME=$admin
+ATAVIX_DATABASE_URL=$database_url
+ATAVIX_POSTGRES_PASSWORD=$db_password
+ATAVIX_PORT=$port
+ATAVIX_PANEL_URL=$panel_url
+ATAVIX_SUB_URL=$sub_url
+ATAVIX_PROXY_URL=$sub_url
+ATAVIX_TRUST_PROXY=$trust_proxy
+ATAVIX_PANEL_DOMAIN=$panel_domain
+ATAVIX_SITE_ADDRESSES='$site_addresses'
+ATAVIX_ACME_EMAIL=$acme_email
+SETTINGS
+    chmod 0600 "$next"
+    mv -f -- "$next" .env
+}
+
+compose() {
+    local -a files=(-f compose.yaml)
+    if [[ $(setting ATAVIX_DB) == postgres ]]; then files+=(-f compose.postgres.yaml); fi
+    if [[ $(setting ATAVIX_INSTALL_MODE) == automatic ]]; then
+        files+=(-f compose.caddy.yaml)
+    else
+        files+=(-f compose.local.yaml)
+    fi
+    docker compose --env-file .env "${files[@]}" "$@"
+}
+
+start() {
+    if ! compose up -d --wait --wait-timeout 110 --remove-orphans "$@"; then
+        die "Startup failed. Run sudo ./main logs for details. Settings were kept for retry."
+    fi
+    printf '\nAtAvix panel: %s/admin/\n' "$(setting ATAVIX_PANEL_URL)"
+    case $(setting ATAVIX_INSTALL_MODE) in
+        local) printf 'For remote administration, forward local port %s over SSH.\n' "$(setting ATAVIX_PORT)" ;;
+        automatic) printf 'Caddy obtains public TLS certificates after DNS and the public ports are reachable.\n' ;;
+    esac
+}
+
+setup() {
+    printf 'AtAvix setup\n\n  1) SQLite\n  2) PostgreSQL\n'
+    db_password=''
+    while true; do
+        prompt "Choose a database" 1
+        case "$REPLY" in
+            1) db=sqlite; database_url=/data/atavix.sqlite; break ;;
+            2) db=postgres
+                db_password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+                database_url="postgresql://atavix:$db_password@postgres:5432/atavix?sslmode=disable"
+                break ;;
+        esac
+        printf 'Choose 1 or 2.\n'
+    done
+    configure_endpoints
+    while true; do
+        prompt "Administrator username" admin
+        if [[ "$REPLY" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$ ]]; then admin=$REPLY; break; fi
+        printf 'Use 3–32 letters, numbers, dots, dashes, or underscores.\n'
+    done
+    ask_password
+    save_settings
+    start --build
+}
+
+case "${1:-up}" in
+    -h|--help|help) usage; exit 0 ;;
+    up|configure|status|logs|stop|update|password) command_name=${1:-up} ;;
+    *) usage >&2; exit 2 ;;
+esac
+(( $# <= 1 )) || die "Pass a single command. See ./main --help."
+(( EUID == 0 )) || die "Run sudo ./main${1:+ $1}."
+[[ $(uname -m) == x86_64 || $(uname -m) == aarch64 ]] || die "AtAvix supports Linux on x86_64 and ARM64."
+if [[ ! -f .env ]]; then
+    [[ "$command_name" == up ]] || die "Run sudo ./main to set up this installation first."
+    ensure_docker
+    setup
+    exit
+fi
+
+case "$command_name" in
+    up) ensure_docker; start ;;
+    configure)
+        ensure_docker
+        db=$(setting ATAVIX_DB)
+        admin=$(setting ATAVIX_ADMIN_USERNAME)
+        database_url=$(setting ATAVIX_DATABASE_URL)
+        db_password=$(setting ATAVIX_POSTGRES_PASSWORD)
+        configure_endpoints
+        save_settings
+        start ;;
+    status) compose ps ;;
+    logs) compose logs --tail=100 -f ;;
+    stop) compose stop ;;
+    update) ensure_docker; start --build ;;
+    password) ensure_docker; ask_password; compose up -d --wait --force-recreate panel ;;
+esac

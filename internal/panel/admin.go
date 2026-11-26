@@ -196,8 +196,8 @@ func (a *admin) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	want := sha256.Sum256([]byte(a.cfg.Admin))
-	got := sha256.Sum256([]byte(r.Form.Get("username")))
-	password := bcrypt.CompareHashAndPassword(a.cfg.PasswordHash, []byte(r.Form.Get("password")))
+	got := sha256.Sum256([]byte(r.PostForm.Get("username")))
+	password := bcrypt.CompareHashAndPassword(a.cfg.PasswordHash, []byte(r.PostForm.Get("password")))
 	if subtle.ConstantTimeCompare(want[:], got[:]) != 1 || password != nil {
 		a.render(w, http.StatusUnauthorized, pageData{Page: "login", Title: "Sign in", Error: "The username or password is incorrect."})
 		return
@@ -276,10 +276,10 @@ func readForm(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func formInput(r *http.Request) (UserInput, error) {
-	quota, err := ParseQuota(r.Form.Get("quota"))
+	quota, err := ParseQuota(r.PostForm.Get("quota"))
 	return UserInput{
-		Username: r.Form.Get("username"), Remark: r.Form.Get("remark"), Quota: quota,
-		Enabled: r.Form.Get("enabled") == "on", TrackDomains: r.Form.Get("track_domains") == "on",
+		Username: r.PostForm.Get("username"), Remark: r.PostForm.Get("remark"), Quota: quota,
+		Enabled: r.PostForm.Get("enabled") == "on", TrackDomains: r.PostForm.Get("track_domains") == "on",
 	}, err
 }
 

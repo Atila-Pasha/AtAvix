@@ -1,0 +1,65 @@
+name: Installer smoke test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install through the wizard
+        env:
+          DATABASE: ${{ matrix.database }}
+        run: |
+          set -euo pipefail
+          database=1
+          if [[ "$DATABASE" == postgres ]]; then database=2; fi
+          printf '%s\n' "$database" 3 18080 admin 'Test-password-18080' 'Test-password-18080' | sudo ./main
+          curl -fsS http://127.0.0.1:18080/healthz -o /dev/null
+      - name: Create an account and check its subscription
+        run: |
+          set -euo pipefail
+          base=http://127.0.0.1:18080
+          cookie=$(mktemp)
+          login() {
+            curl -fsS -c "$cookie" --data 'username=admin&password=Test-password-18080' "$base/admin/login" -o /dev/null
+          }
+          login
+          detail=$(curl -fsS -b "$cookie" -w '%{redirect_url}' -o /dev/null \
+            --data-urlencode 'username=ci-user' --data-urlencode 'remark=CI Primary' \
+            --data-urlencode 'quota=10' --data-urlencode 'enabled=on' "$base/admin/users")
+          link=$(curl -fsS -b "$cookie" "$detail" | sed -n 's/.*id="subscription-link" readonly value="\([^"]*\)".*/\1/p')
+          [[ "$link" == "$base/"* ]]
+          profiles=$(curl -fsS "$link" | base64 --decode)
+          [[ "$(printf '%s\n' "$profiles" | wc -l)" == 2 ]]
+          [[ "$profiles" == *'#CI%20Primary'* && "$profiles" == *'#ci-user-10%20GB'* ]]
+          sudo ./main stop
+          sudo ./main
+          login
+          [[ "$(curl -fsS -b "$cookie" "$detail" | sed -n 's/.*id="subscription-link" readonly value="\([^"]*\)".*/\1/p')" == "$link" ]]
+      - name: Validate Caddy and split-domain settings
+        run: |
+          set -euo pipefail
+          export ATAVIX_ADMIN_USERNAME=admin ATAVIX_PANEL_URL=https://panel.example.com
+          export ATAVIX_SUB_URL=https://sub.example.com ATAVIX_PROXY_URL=https://sub.example.com
+          export ATAVIX_SITE_ADDRESSES='panel.example.com, sub.example.com'
+          export ATAVIX_PANEL_DOMAIN=panel.example.com ATAVIX_ACME_EMAIL=ops@example.com
+          docker compose --env-file /dev/null -f compose.yaml -f compose.caddy.yaml config --quiet
+          docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e ATAVIX_SITE_ADDRESSES -e ATAVIX_PANEL_DOMAIN -e ATAVIX_ACME_EMAIL \
+            caddy:2.11.9-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Show service logs on failure
+        if: failure()
+        run: timeout 5s sudo ./main logs || true

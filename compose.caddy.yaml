@@ -1,0 +1,25 @@
+services:
+  panel:
+    environment:
+      TRUST_PROXY: "true"
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    depends_on:
+      panel:
+        condition: service_healthy
+    environment:
+      ATAVIX_SITE_ADDRESSES: ${ATAVIX_SITE_ADDRESSES:?Set public domains with ./main configure}
+      ATAVIX_PANEL_DOMAIN: ${ATAVIX_PANEL_DOMAIN:?Set a panel domain}
+      ATAVIX_ACME_EMAIL: ${ATAVIX_ACME_EMAIL:?Set an ACME email address}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  caddy-data:
+  caddy-config:
