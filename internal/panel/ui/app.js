@@ -26,7 +26,7 @@ document.addEventListener("click", async (event) => {
     const copied = document.execCommand("copy");
     field.remove();
     copy.focus();
-    announce(copied ? "Copied to clipboard" : "Copy unavailable. Select the link on the account page.");
+    announce(copied ? "Copied to clipboard" : "Copy unavailable. Select the text and copy it manually.");
   }
 });
 

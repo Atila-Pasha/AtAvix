@@ -51,13 +51,12 @@ func TestOperatorProfiles(t *testing.T) {
 		{"Home + Studio (MCI)", "vpn.example.org:8443", "reality", ""},
 		{"Home + Studio (Irancell)", "sub.example.org:443", "tls", PrimaryPath},
 		{"Home + Studio (Shatel)", "other.example.org:443", "tls", PrimaryPath},
-		{"alex-10 GB", "sub.example.org:443", "tls", BalancePath},
 	}
 	if len(profiles) != len(expected) {
 		t.Fatalf("got %d profiles, expected %d", len(profiles), len(expected))
 	}
 	for index, want := range expected {
-		link, err := url.Parse(profiles[index])
+		link, err := url.Parse(profiles[index].URI)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +65,7 @@ func TestOperatorProfiles(t *testing.T) {
 			t.Fatalf("profile %d did not use the expected label, address and settings", index)
 		}
 	}
-	if withoutReality := subscriptionProfiles(reloaded, base, nil, account); len(withoutReality) != 3 {
+	if withoutReality := subscriptionProfiles(reloaded, base, nil, account); len(withoutReality) != 2 {
 		t.Fatal("disabled REALITY route remained exposed")
 	}
 	if err := reg.saveOperatorRoutes(ctx, nil); err != nil {

@@ -9,11 +9,11 @@ func NewHandler(cfg Config, reg *Registry, gateway *Gateway) http.Handler {
 	mux := http.NewServeMux()
 	attachAdmin(mux, cfg, reg)
 	mux.Handle("GET "+PrimaryPath, gateway)
-	mux.Handle("GET "+BalancePath, gateway)
+	mux.Handle("GET "+AlternatePath, gateway)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.Handle("GET /{token}", serveSubscription(reg, cfg.ProxyURL, cfg.Reality))
+	mux.Handle("GET /{token}", serveSubscription(reg, cfg))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 	})

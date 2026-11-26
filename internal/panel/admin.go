@@ -82,7 +82,7 @@ func attachAdmin(mux *http.ServeMux, cfg Config, reg *Registry) {
 	if err != nil {
 		panic(err)
 	}
-	for _, file := range []string{"style.css", "app.js"} {
+	for _, file := range []string{"style.css", "app.js", "subscription.css"} {
 		mux.Handle("GET /assets/"+file, http.StripPrefix("/assets/", http.FileServerFS(static)))
 	}
 	mux.HandleFunc("GET /admin/{$}", a.restrict(a.directory("dashboard")))

@@ -3,9 +3,7 @@ package panel
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -20,8 +18,8 @@ import (
 )
 
 const (
-	PrimaryPath = "/connect"
-	BalancePath = "/balance"
+	PrimaryPath   = "/connect"
+	AlternatePath = "/fallback"
 )
 
 var hostnameLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -53,28 +51,6 @@ func profile(base *url.URL, u User, path, name string) string {
 func shareURI(address string, id uuid.UUID, query url.Values, name string) string {
 	link := url.URL{Scheme: "vless", User: url.User(id.String()), Host: address, RawQuery: query.Encode()}
 	return link.String() + "#" + strings.ReplaceAll(url.QueryEscape(name), "+", "%20")
-}
-
-func serveSubscription(reg *Registry, base *url.URL, reality *Reality) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-		token, err := uuid.Parse(r.PathValue("token"))
-		if err != nil || token.String() != r.PathValue("token") {
-			http.NotFound(w, r)
-			return
-		}
-		u, ok := reg.find(token, true)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		body := strings.Join(subscriptionProfiles(reg, base, reality, u), "\n") + "\n"
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=0", u.Uploaded, u.Used-u.Uploaded, u.Quota))
-		w.Header().Set("Profile-Update-Interval", "1")
-		io.WriteString(w, base64.StdEncoding.EncodeToString([]byte(body))+"\n")
-	}
 }
 
 type Gateway struct {

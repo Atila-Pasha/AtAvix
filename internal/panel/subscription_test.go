@@ -1,0 +1,97 @@
+package panel
+
+import (
+	"encoding/base64"
+	"html"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+)
+
+func TestSubscriptionPageAndClientImport(t *testing.T) {
+	reg, err := OpenRegistry(t.Context(), "sqlite3", filepath.Join(t.TempDir(), "panel.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+
+	u, err := reg.Save(t.Context(), uuid.Nil, UserInput{
+		Username: "mobile-user", Remark: "North & West", Quota: 10_000_000_000, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, _ := url.Parse("https://sub.example.org:2053")
+	reality := &Reality{Public: "vpn.example.org:7443", ServerName: "sub.example.org"}
+	if err := reg.InitializeReality(t.Context(), reality); err != nil {
+		t.Fatal(err)
+	}
+	server := NewHandler(Config{PanelURL: base, SubscriptionURL: base, ProxyURL: base, Reality: reality}, reg, nil)
+	get := func(path, accept string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, base.String()+path, nil)
+		r.Header.Set("Accept", accept)
+		server.ServeHTTP(w, r)
+		return w
+	}
+
+	path := "/" + u.Token.String()
+	browser := get(path, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	body := browser.Body.String()
+	if browser.Code != http.StatusOK || !strings.HasPrefix(browser.Header().Get("Content-Type"), "text/html") ||
+		browser.Header().Get("Cache-Control") != "no-store" || browser.Header().Get("Vary") != "Accept" ||
+		browser.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("unexpected browser response headers: %d %v", browser.Code, browser.Header())
+	}
+	for _, fragment := range []string{"North &amp; West (MCI)", "North &amp; West (Irancell)", "Data remaining", "/assets/subscription.css"} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("subscription page missing %q", fragment)
+		}
+	}
+	android := regexp.MustCompile(`href="(v2rayng:[^"]+)"`).FindStringSubmatch(body)
+	if len(android) != 2 {
+		t.Fatal("missing Android import action")
+	}
+	action, err := url.Parse(html.UnescapeString(android[1]))
+	if err != nil || action.Host != "install-config" || action.Query().Get("url") != base.String()+path+"?format=raw" {
+		t.Fatalf("invalid Android import action: %v", err)
+	}
+
+	feed := get(path, "*/*")
+	explicitFeed := get(path+"?format=raw", "text/html")
+	rejectedHTML := get(path, "text/html;q=0,*/*")
+	if !strings.HasPrefix(feed.Header().Get("Content-Type"), "text/plain") ||
+		feed.Body.String() != explicitFeed.Body.String() || feed.Body.String() != rejectedHTML.Body.String() {
+		t.Fatal("client requests did not return the same subscription feed")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(feed.Body.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(decoded)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected two connection profiles and an informational row, got %d", len(lines))
+	}
+	for i, expected := range []string{"reality", "tls", "none"} {
+		profile, err := url.Parse(lines[i])
+		if err != nil || profile.Query().Get("security") != expected {
+			t.Fatalf("unexpected transport security at row %d: %v", i, err)
+		}
+	}
+	if _, ok := reg.find(usageOnlyID, false); ok {
+		t.Fatal("usage-only UUID resolves to a real account")
+	}
+	oldBalance := get("/balance", "*/*")
+	if oldBalance.Code != http.StatusNotFound {
+		t.Fatalf("the retired balance listener returned %d", oldBalance.Code)
+	}
+	if asset := get("/assets/subscription.css", "text/css"); asset.Code != http.StatusOK {
+		t.Fatalf("subscription stylesheet returned %d", asset.Code)
+	}
+}

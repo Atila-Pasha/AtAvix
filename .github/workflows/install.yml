@@ -43,8 +43,14 @@ jobs:
           link=$(curl -fsS -b "$cookie" "$detail" | sed -n 's/.*id="subscription-link" readonly value="\([^"]*\)".*/\1/p')
           [[ "$link" == "$base/"* ]]
           profiles=$(curl -fsS "$link" | base64 --decode)
-          [[ "$(printf '%s\n' "$profiles" | wc -l)" == 2 ]]
-          [[ "$profiles" == *'#CI%20Primary'* && "$profiles" == *'#ci-user-10%20GB'* ]]
+          [[ "$(printf '%s\n' "$profiles" | wc -l)" == 3 ]]
+          [[ "$profiles" == *'#CI%20Primary%20%28Irancell%29'* && "$profiles" == *'#CI%20Primary%20%28MCI%29'* ]]
+          [[ "$profiles" == *'balance.atavix.invalid:1'* && "$profiles" == *'#ci-user-10%20GB'* ]]
+          html=$(curl -fsS -H 'Accept: text/html' "$link")
+          [[ "$html" == *'Open in v2rayNG'* && "$html" == *'Copy profiles for v2rayN'* ]]
+          curl -fsS "$base/assets/subscription.css" -o /dev/null
+          [[ "$(curl -fsS -H 'Accept: text/html' "$link?format=raw" | base64 --decode)" == "$profiles" ]]
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' "$base/balance")" == 404 ]]
           sudo ./main stop
           sudo ./main
           login

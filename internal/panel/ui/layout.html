@@ -235,7 +235,7 @@
 {{define "operatorSettings"}}
   <section class="panel info-panel operator-panel" aria-labelledby="operator-heading">
     <h2 id="operator-heading">Operator profiles</h2>
-    <p class="secondary">Add a route for each operator you have tested. A user with the remark “Home” sees a name like “Home (Irancell)”.</p>
+    <p class="secondary">Add a route for each operator you have tested. A user with the remark “Home” sees a name like “Home (Irancell)”. An empty list publishes the default MCI and Irancell profiles.</p>
     <p class="secondary" id="operator-hint">Leave the public endpoint blank to use the installation endpoint. A custom endpoint must forward to this AtAvix instance.</p>
     {{if .OperatorError}}<p class="alert" role="alert">{{.OperatorError}}</p>{{end}}
     {{if .OperatorSaved}}<p class="save-notice" role="status">Operator profiles saved. Clients can refresh their subscriptions.</p>{{end}}

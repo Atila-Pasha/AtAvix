@@ -5,7 +5,7 @@ AtAvix is a self-hosted control panel for VLESS subscriptions. The English-langu
 ## What you get
 
 - Add, search, edit, pause, or delete users. Set each user's quota in GB and choose a custom remark.
-- Share one subscription link per user. The primary profile uses your custom remark and prefers direct VLESS over TCP + REALITY when enabled. The WebSocket profile displays a name such as `alex-7.5 GB`, recalculated on every subscription refresh. All profiles share the same quota and speed limit. You can publish additional routes with operator names in their remarks.
+- Share one subscription link per user. Each connection profile combines your remark with the operator name. The subscription also includes a display-only balance such as `alex-7.5 GB`, recalculated on every refresh. All profiles share the same quota and speed limit. You can publish additional routes with operator names in their remarks.
 - Use one hostname for everything or separate the admin panel and client connections, for example `https://panel.example.com/admin/` and `https://sub.example.com/<subscription-uuid>`.
 - Choose SQLite or a managed PostgreSQL container during setup.
 - Optionally record domain names for individual users. Tracking starts off and can be disabled or cleared independently for each account.
@@ -51,7 +51,7 @@ Automatic HTTPS renews certificates using the Caddy data volume. For certificate
 
 ### Option 2 · Existing HTTPS reverse proxy
 
-Enter the localhost port for the backend and the public HTTPS origins. Point your reverse proxy to `127.0.0.1:<port>`. Preserve the incoming `Host` and allow WebSocket upgrades on `/connect` and `/balance`. Keep subscription responses uncached and exclude their URL paths from access logs.
+Enter the localhost port for the backend and the public HTTPS origins. Point your reverse proxy to `127.0.0.1:<port>`. Preserve the incoming `Host` and allow WebSocket upgrades on `/connect` and `/fallback`. Keep subscription responses uncached and exclude their URL paths from access logs.
 
 This example belongs inside the matching Nginx TLS server block. Configure a valid certificate for each public hostname.
 
@@ -105,8 +105,8 @@ Existing installations can update with `git pull --ff-only` and `sudo ./main upd
 1. Open **Users → Add user**.
 2. Enter a unique username, a connection remark, and the traffic quota. Enter `10` for 10 GB. The panel generates the connection UUID and the separate subscription UUID automatically.
 3. Open the user's details and select **Copy link**. Share the link privately. Anyone with the link can download that user's connection credentials and consume the quota.
-4. Add the URL as a subscription group in **v2rayN**, or as a subscription in **v2rayNG**, then run the client's subscription update. The subscription imports your connection profiles and a profile named `username-remaining`, such as `alex-10 GB`. Any of these profiles can be selected for use.
-5. Update the subscription again after using it to refresh the remaining volume in the balance profile name. The exact menu labels vary across client releases. Configure manual or scheduled updates in the client according to how often you want the name refreshed.
+4. Open the link in a browser to see your remaining balance and copy individual connection profiles. **Open in v2rayNG** imports and refreshes the subscription in supported Android versions. For **v2rayN**, copy the subscription URL and add it as a subscription group to receive updates, or use **Copy profiles for v2rayN** and import them from the clipboard.
+5. Update the subscription after use to refresh the balance row, such as `alex-10 GB`. It uses a reserved address and a placeholder UUID, so it cannot connect. The exact menu labels vary across client releases. Configure manual or scheduled updates in the client according to how often you want the name refreshed.
 
 To stop connections temporarily, disable the account in its details. Increasing its quota allows an exhausted account to resume if enabled. Deleting an account disconnects it and revokes its link and profiles. Moving the public hostname changes the origin of existing subscription URLs, so send the new links to users.
 
@@ -119,7 +119,7 @@ Open **Settings → Operator profiles**. Test a route from a connection on the i
 3. For an alternate path, enter a REALITY `hostname:port` or a WebSocket HTTPS origin. Alternate REALITY addresses must forward TCP to the same listener. Alternate WebSocket origins need valid certificates and must reverse-proxy `/connect` to this AtAvix instance.
 4. Select **Save profiles**. Existing subscription links pick up the changes at refresh. With remark `Home`, the client displays `Home (Irancell)` for that route. The balance profile keeps the `username-remaining` name.
 
-Routes are emitted in the order shown in Settings. Up to 12 operator profiles can be published, plus the balance profile. Each operator route needs a distinct combination of transport and endpoint. If REALITY is disabled, its operator profiles remain saved and are omitted until it is enabled. An empty operator list uses the installation's default profiles.
+Routes are emitted in the order shown in Settings. Up to 12 operator profiles can be published, plus the balance profile. Each operator route needs a distinct combination of transport and endpoint. If REALITY is disabled, its operator profiles remain saved and are omitted until it is enabled. An empty operator list provides two suggested profiles labeled `MCI` and `Irancell`. With REALITY enabled the first uses TCP + REALITY and the second uses WebSocket. Installations running WebSocket alone publish both labels over the same WebSocket listener with separate paths. Treat the labels as starting points and test them from the intended networks.
 
 ### How traffic and domain activity work
 

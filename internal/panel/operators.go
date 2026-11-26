@@ -133,10 +133,27 @@ func validateOperatorRoutes(routes []OperatorRoute, cfg Config) ([]OperatorRoute
 	return valid, nil
 }
 
-func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User) []string {
-	var profiles []string
+type connectionProfile struct {
+	Name, Transport, URI string
+}
+
+func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User) []connectionProfile {
+	name := func(operator string) string { return u.Remark + " (" + operator + ")" }
+	websocket := func(endpoint *url.URL, path, operator string) connectionProfile {
+		label := name(operator)
+		transport := "WebSocket"
+		if endpoint.Scheme == "https" {
+			transport = "WebSocket + TLS"
+		}
+		return connectionProfile{label, transport, profile(endpoint, u, path, label)}
+	}
+	direct := func(address, operator string) connectionProfile {
+		label := name(operator)
+		return connectionProfile{label, "TCP + REALITY", reality.profileAt(address, u.ID, label)}
+	}
+
+	var profiles []connectionProfile
 	for _, route := range reg.OperatorRoutes() {
-		name := u.Remark + " (" + route.Operator + ")"
 		switch route.Transport {
 		case "reality":
 			if reality != nil {
@@ -144,7 +161,7 @@ func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User
 				if address == "" {
 					address = reality.Public
 				}
-				profiles = append(profiles, reality.profileAt(address, u.ID, name))
+				profiles = append(profiles, direct(address, route.Operator))
 			}
 		case "ws":
 			endpoint := base
@@ -155,15 +172,20 @@ func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User
 					continue
 				}
 			}
-			profiles = append(profiles, profile(endpoint, u, PrimaryPath, name))
+			profiles = append(profiles, websocket(endpoint, PrimaryPath, route.Operator))
 		}
 	}
 	if len(profiles) == 0 {
-		primary := profile(base, u, PrimaryPath, u.Remark)
 		if reality != nil {
-			primary = reality.profileAt(reality.Public, u.ID, u.Remark)
+			return []connectionProfile{
+				direct(reality.Public, "MCI"),
+				websocket(base, PrimaryPath, "Irancell"),
+			}
 		}
-		profiles = append(profiles, primary)
+		return []connectionProfile{
+			websocket(base, PrimaryPath, "MCI"),
+			websocket(base, AlternatePath, "Irancell"),
+		}
 	}
-	return append(profiles, profile(base, u, BalancePath, u.Username+"-"+FormatBytes(u.Remaining())))
+	return profiles
 }

@@ -53,7 +53,7 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 	}
 	base, _ := url.Parse("https://sub.example.org")
 	mux := http.NewServeMux()
-	mux.Handle("GET /{token}", serveSubscription(reg, base, nil))
+	mux.Handle("GET /{token}", serveSubscription(reg, Config{SubscriptionURL: base, ProxyURL: base}))
 	read := func(key uuid.UUID) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, httptest.NewRequest("GET", "/"+key.String(), nil))
@@ -73,20 +73,25 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 			t.Fatal(err)
 		}
 		profiles := strings.Split(strings.TrimSpace(string(raw)), "\n")
-		if len(profiles) != 2 {
+		if len(profiles) != 3 {
 			t.Fatalf("got %d profiles", len(profiles))
 		}
-		for i, expectedPath := range []string{PrimaryPath, BalancePath} {
+		for i, expectedPath := range []string{PrimaryPath, AlternatePath} {
 			q, err := url.Parse(profiles[i])
 			if err != nil || q.Scheme != "vless" || q.Host != "sub.example.org:443" ||
 				q.User.Username() != u.ID.String() || q.Query().Get("path") != expectedPath ||
 				q.Query().Get("security") != "tls" || q.Query().Get("sni") != "sub.example.org" {
 				t.Fatalf("invalid profile %d: %s", i, profiles[i])
 			}
-			fragment := []string{u.Remark, u.Username + "-" + expectedBalance}[i]
+			fragment := []string{u.Remark + " (MCI)", u.Remark + " (Irancell)"}[i]
 			if q.Fragment != fragment {
 				t.Fatalf("unexpected remark %q", q.Fragment)
 			}
+		}
+		marker, err := url.Parse(profiles[2])
+		if err != nil || marker.Host != usageOnlyAddress || marker.User.Username() != usageOnlyID.String() ||
+			marker.User.Username() == u.ID.String() || marker.Fragment != u.Username+"-"+expectedBalance {
+			t.Fatalf("invalid balance marker: %s", profiles[2])
 		}
 	}
 	checkProfiles("10 GB", "upload=0; download=0; total=10000000000; expire=0")
@@ -175,7 +180,7 @@ func TestXrayTunnel(t *testing.T) {
 	request = append(request, u.ID[:]...)
 	request = append(request, 0, 1, 1, 187, 2, 11)
 	request = append(request, "example.com"...)
-	for _, path := range []string{PrimaryPath, BalancePath} {
+	for _, path := range []string{PrimaryPath, AlternatePath} {
 		t.Run(path, func(t *testing.T) {
 			client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+path, nil)
 			if err != nil {
