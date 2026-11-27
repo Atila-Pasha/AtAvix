@@ -26,6 +26,7 @@ type subscriptionPage struct {
 	CopyList                         string
 	AndroidLink, HiddifySubscription template.URL
 	TelegramLink                     template.URL
+	TrafficScale                     int64
 }
 
 // Both clients register this action. v2rayNG also parses a URL-safe Base64 list.
@@ -81,7 +82,7 @@ func serveSubscription(reg *Registry, cfg Config) http.HandlerFunc {
 			"encryption": {"none"}, "security": {"none"}, "type": {"tcp"},
 		}, subscriptionBalance(u.Remaining(), u.Quota)))
 		body := strings.Join(lines, "\n") + "\n"
-		w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=0", u.Uploaded, u.Used-u.Uploaded, u.Quota))
+		w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=0", u.Uploaded, u.Downloaded(), u.Quota))
 		w.Header().Set("Profile-Update-Interval", "1")
 		if wantsSubscriptionPage(r) {
 			raw := subscriptionURL(cfg.SubscriptionURL, u) + "?format=raw"
@@ -90,6 +91,7 @@ func serveSubscription(reg *Registry, cfg Config) http.HandlerFunc {
 				AndroidLink:         clientImport("v2rayng", base64.RawURLEncoding.EncodeToString([]byte(body))),
 				HiddifySubscription: clientImport("hiddify", raw),
 				TelegramLink:        template.URL(cfg.Telegram.link(u.ID)),
+				TrafficScale:        max(u.Used, 1),
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if err := templates.ExecuteTemplate(w, "subscription", data); err != nil {

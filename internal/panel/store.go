@@ -36,6 +36,8 @@ type User struct {
 
 func (u User) Remaining() int64 { return max(u.Quota-u.Used, 0) }
 
+func (u User) Downloaded() int64 { return u.Used - u.Uploaded }
+
 func (u User) Status() string {
 	switch {
 	case !u.Enabled:

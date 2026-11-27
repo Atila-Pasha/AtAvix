@@ -85,3 +85,14 @@ if (clientGrid) {
     clientGrid.prepend(recommendation);
   }
 }
+
+const quotaChart = document.querySelector(".quota-chart");
+if (quotaChart && CSS.supports("background", "conic-gradient(black, white)")) {
+  const bar = quotaChart.querySelector("progress");
+  const ring = quotaChart.querySelector(".quota-ring");
+  const percent = bar.position * 100;
+  ring.style.setProperty("--quota-fill", `${percent}%`);
+  ring.querySelector("strong").textContent = `${Math.floor(percent)}%`;
+  ring.hidden = false;
+  bar.hidden = true;
+}

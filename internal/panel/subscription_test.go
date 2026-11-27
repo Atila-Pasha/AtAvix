@@ -22,13 +22,22 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 	defer reg.Close()
 
 	u, err := reg.Save(t.Context(), uuid.Nil, UserInput{
-		Username: "mobile-user", Remark: "North & West", Quota: 20_000_000_000, Enabled: true,
+		Username: "mobile-user", Remark: "North & West", Quota: 20_000_000_000, Enabled: true, TrackDomains: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	base, _ := url.Parse("https://sub.example.org:2053")
-	reg.charge(u.ID, 17_400_000_000, true)
+	reg.charge(u.ID, 5_000_000_000, true)
+	reg.charge(u.ID, 12_400_000_000, false)
+	const privateDomain = "private-activity.example.org"
+	reg.observe(u.ID, privateDomain)
+	if err := reg.Flush(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if domains, err := reg.Activity(t.Context(), u.ID); err != nil || len(domains) != 1 || domains[0].Hostname != privateDomain {
+		t.Fatal("expected a recorded domain for the privacy check")
+	}
 	reality := &Reality{
 		realityEndpoint: realityEndpoint{Public: "vpn.example.org:7443"},
 		XHTTP:           realityEndpoint{Public: "vpn.example.org:7444"}, ServerName: "sub.example.org",
@@ -58,6 +67,18 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 			t.Fatalf("subscription page missing %q", fragment)
 		}
 	}
+	for _, fragment := range []string{
+		"Usage statistics", "17.4 GB", "2.6 GB", "20 GB",
+		`<span>Download</span><strong>12.4 GB</strong>`, `class="download-bar" value="12400000000" max="17400000000"`,
+		`<span>Upload</span><strong>5 GB</strong>`, `class="upload-bar" value="5000000000" max="17400000000"`,
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("usage charts missing %q", fragment)
+		}
+	}
+	if strings.Contains(body, privateDomain) {
+		t.Fatal("subscription disclosed a recorded domain")
+	}
 	android := regexp.MustCompile(`href="(v2rayng:[^"]+)"`).FindStringSubmatch(body)
 	if len(android) != 2 {
 		t.Fatal("missing Android import action")
@@ -77,6 +98,9 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(feed.Body.String()))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if strings.Contains(string(decoded), privateDomain) {
+		t.Fatal("subscription feed disclosed a recorded domain")
 	}
 	batch, err := base64.RawURLEncoding.DecodeString(action.Query().Get("url"))
 	if err != nil || string(batch) != string(decoded) {

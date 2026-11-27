@@ -111,6 +111,8 @@ Existing installations can update with `git pull --ff-only` and `sudo ./main upd
 
 The subscription page includes the original client icons for identification. [v2rayNG](https://github.com/2dust/v2rayNG) · [v2rayN](https://github.com/2dust/v2rayN) · [Hiddify](https://github.com/hiddify/hiddify-app)
 
+**Usage statistics** on the subscription page shows the account's cumulative upload and download totals, used data, and remaining allowance. Its charts use byte counters only. Domain activity is available through the admin panel when enabled for that account.
+
 To stop connections temporarily, disable the account in its details. Increasing its quota allows an exhausted account to resume if enabled. Deleting an account disconnects it and revokes its link and profiles. Moving the public hostname changes the origin of existing subscription URLs, so send the new links to users.
 
 ### Operator profiles

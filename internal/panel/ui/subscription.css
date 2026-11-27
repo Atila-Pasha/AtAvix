@@ -52,6 +52,45 @@ h1 { font-size: clamp(1.8rem, 5vw, 2.45rem); letter-spacing: -.05em; line-height
 progress { width: 100%; height: 7px; margin: 4px 0; accent-color: var(--accent); }
 
 .card { border: 1px solid var(--border); border-radius: 14px; background: #1c1625; padding: 17px 20px; }
+.stats { margin-bottom: 16px; }
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.stats-panel {
+  --chart-track: #42334f;
+  margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #15101d;
+}
+.stats-panel figcaption { margin-bottom: 13px; font-size: .9rem; font-weight: 650; }
+.quota-chart { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.quota-ring {
+  position: relative; width: 88px; aspect-ratio: 1; border-radius: 50%;
+  background: conic-gradient(var(--accent) 0 var(--quota-fill), var(--chart-track) var(--quota-fill));
+}
+.quota-ring > div {
+  position: absolute; inset: 8px; display: grid; place-content: center; text-align: center;
+  border-radius: 50%; background: #15101d;
+}
+.quota-ring strong { font-size: 1.15rem; }
+.quota-ring small { color: var(--muted); font-size: .7rem; }
+.quota-chart dl { flex: 1 1 105px; display: grid; gap: 7px; margin: 0; }
+.quota-chart dl > div, .traffic-chart p {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: .82rem;
+}
+.quota-chart dt, .traffic-chart span { color: var(--muted); }
+.quota-chart dd, .traffic-chart strong { margin: 0; font-weight: 650; white-space: nowrap; }
+.quota-used::before, .quota-remaining::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; background: var(--accent);
+}
+.quota-remaining::before { background: var(--chart-track); }
+.traffic-chart { display: grid; gap: 10px; }
+.stats-panel progress {
+  --chart-fill: var(--accent);
+  appearance: none; height: 8px; border: 0; border-radius: 999px; overflow: hidden;
+  background: var(--chart-track);
+}
+.stats-panel .upload-bar { --chart-fill: #e2a0d6; }
+.stats-panel progress::-webkit-progress-bar { background: var(--chart-track); }
+.stats-panel progress::-webkit-progress-value { background: var(--chart-fill); border-radius: 999px; }
+.stats-panel progress::-moz-progress-bar { background: var(--chart-fill); border-radius: 999px; }
 .import { margin-bottom: 25px; }
 h2 { font-size: 1.05rem; }
 .copy-field, .profile { display: flex; align-items: center; gap: 9px; }
@@ -108,7 +147,7 @@ h2 { font-size: 1.05rem; }
 .client-download { margin-top: auto; color: var(--accent); text-underline-offset: 3px; }
 .recommendation { color: var(--accent); }
 @media (max-width: 630px) {
-  .client-grid { grid-template-columns: 1fr; }
+  .client-grid, .stats-grid { grid-template-columns: 1fr; }
   .profile { flex-wrap: wrap; }
 }
 

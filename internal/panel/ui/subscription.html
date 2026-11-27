@@ -29,6 +29,40 @@
       </div>
     </section>
 
+    <section class="card stats" aria-labelledby="stats-heading">
+      <h2 id="stats-heading">Usage statistics</h2>
+      <div class="stats-grid">
+        <figure class="stats-panel">
+          <figcaption>Data allowance</figcaption>
+          <div class="quota-chart">
+            <progress value="{{.User.Used}}" max="{{.User.Quota}}" aria-hidden="true"></progress>
+            <div class="quota-ring" aria-hidden="true" hidden>
+              <div><strong></strong><small>used</small></div>
+            </div>
+            <dl>
+              <div><dt class="quota-used">Used</dt><dd>{{bytes .User.Used}}</dd></div>
+              <div><dt class="quota-remaining">Remaining</dt><dd>{{bytes .User.Remaining}}</dd></div>
+              <div><dt>Quota</dt><dd>{{bytes .User.Quota}}</dd></div>
+            </dl>
+          </div>
+        </figure>
+        <figure class="stats-panel">
+          <figcaption>Traffic by direction</figcaption>
+          <div class="traffic-chart">
+            <div>
+              <p><span>Download</span><strong>{{bytes .User.Downloaded}}</strong></p>
+              <progress class="download-bar" value="{{.User.Downloaded}}" max="{{.TrafficScale}}" aria-hidden="true"></progress>
+            </div>
+            <div>
+              <p><span>Upload</span><strong>{{bytes .User.Uploaded}}</strong></p>
+              <progress class="upload-bar" value="{{.User.Uploaded}}" max="{{.TrafficScale}}" aria-hidden="true"></progress>
+            </div>
+          </div>
+          <p class="hint">Cumulative traffic{{if .TelegramLink}} for VLESS and Telegram{{end}}.</p>
+        </figure>
+      </div>
+    </section>
+
     <section class="card import" aria-labelledby="import-heading">
       <h2 id="import-heading">Add to a client</h2>
       <div class="client-grid">
