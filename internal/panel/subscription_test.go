@@ -62,7 +62,7 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 		browser.Header().Get("Referrer-Policy") != "no-referrer" {
 		t.Fatalf("unexpected browser response headers: %d %v", browser.Code, browser.Header())
 	}
-	for _, fragment := range []string{"North &amp; West (MCI)", "North &amp; West (Irancell)", "North &amp; West (Rightel)", "Data remaining", "/assets/subscription.css"} {
+	for _, fragment := range []string{"North &amp; West (MCI)", "North &amp; West (Irancell)", "North &amp; West (Rightel)", "Data remaining", "/assets/subscription.css", `class="brand-mark"><img src="/assets/atavix-emblem.webp"`} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("subscription page missing %q", fragment)
 		}
@@ -136,5 +136,8 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 	}
 	if asset := get("/assets/subscription.css", "text/css"); asset.Code != http.StatusOK {
 		t.Fatalf("subscription stylesheet returned %d", asset.Code)
+	}
+	if asset := get("/assets/atavix-emblem.webp", "image/webp"); asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "image/webp" {
+		t.Fatalf("brand emblem returned %d with content type %q", asset.Code, asset.Header().Get("Content-Type"))
 	}
 }

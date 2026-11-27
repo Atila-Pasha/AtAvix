@@ -6,13 +6,14 @@
   <meta name="color-scheme" content="dark">
   <meta name="robots" content="noindex, nofollow">
   <title>Subscription · AtAvix</title>
+  <link rel="icon" type="image/webp" href="/assets/atavix-emblem.webp">
   <link rel="stylesheet" href="/assets/subscription.css">
   <script src="/assets/app.js" defer></script>
 </head>
 <body>
   <main class="subscription">
     <header class="topline">
-      <span class="brand"><span class="brand-mark" aria-hidden="true">A</span> AtAvix</span>
+      <span class="brand">{{template "brandContent"}}</span>
       <span class="status {{statusClass .User.Status}}">{{.User.Status}}</span>
     </header>
 

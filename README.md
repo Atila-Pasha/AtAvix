@@ -1,5 +1,7 @@
 # AtAvix
 
+<p align="center"><img src="docs/images/atavix-brand.png" width="680" alt="AtAvix wordmark with a violet orbital emblem"></p>
+
 AtAvix is a self-hosted control panel for VLESS subscriptions. The English-language dashboard uses a black and violet theme and gives each user a separate quota, connection UUID, and private subscription link.
 
 ## What you get
@@ -10,6 +12,16 @@ AtAvix is a self-hosted control panel for VLESS subscriptions. The English-langu
 - Choose SQLite or a managed PostgreSQL container during setup.
 - Optionally issue each account a private Telegram MTProto link with the same quota as VLESS.
 - Optionally record domain names for individual users. Tracking starts off and can be disabled or cleared independently for each account.
+
+## Screenshots
+
+### Admin dashboard
+
+![AtAvix admin dashboard with the traffic summary and user directory](docs/images/admin-dashboard.png)
+
+### Subscription page
+
+![AtAvix subscription page with usage charts, client import options, and connection profiles](docs/images/subscription-page.png)
 
 ## Requirements
 

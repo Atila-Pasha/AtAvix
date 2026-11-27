@@ -1,3 +1,5 @@
+{{define "brandContent"}}<span class="brand-mark"><img src="/assets/atavix-emblem.webp" width="36" height="36" alt=""></span><span>AtAvix</span>{{end}}
+
 {{define "layout"}}<!doctype html>
 <html lang="en">
 <head>
@@ -5,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>{{.Title}} · AtAvix</title>
+  <link rel="icon" type="image/webp" href="/assets/atavix-emblem.webp">
   <link rel="stylesheet" href="/assets/style.css">
   <script src="/assets/app.js" defer></script>
 </head>
@@ -12,7 +15,7 @@
 {{if eq .Page "login"}}
   <main class="sign-in">
     <div class="sign-in-card">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>AtAvix</span></div>
+      <div class="brand">{{template "brandContent"}}</div>
       <h1>Sign in to AtAvix</h1>
       <p class="secondary">Manage your users, quotas, and subscriptions.</p>
       {{template "alert" .}}
@@ -26,7 +29,7 @@
 {{else}}
   <div class="shell">
     <aside class="sidebar">
-      <a class="brand" href="/admin/"><span class="brand-mark" aria-hidden="true"></span><span>AtAvix</span></a>
+      <a class="brand" href="/admin/">{{template "brandContent"}}</a>
       <nav aria-label="Main navigation">
         <a href="/admin/" {{if eq .Page "dashboard"}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">▦</span>Overview</a>
         <a href="/admin/users" {{if or (eq .Page "users") (eq .Page "detail") (eq .Page "new")}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">◎</span>Users</a>

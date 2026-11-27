@@ -11,7 +11,7 @@
 
 {$ATAVIX_SITE_ADDRESSES} {
 	@panel host {$ATAVIX_PANEL_DOMAIN}
-	@public path_regexp public ^/(connect|fallback|assets/(app\.js|subscription\.css|v2rayng\.png|v2rayn\.ico|hiddify\.png)|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$
+	@public path_regexp public ^/(connect|fallback|assets/(app\.js|subscription\.css|atavix-emblem\.webp|v2rayng\.png|v2rayn\.ico|hiddify\.png)|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$
 
 	handle @panel {
 		import atavix_backend
