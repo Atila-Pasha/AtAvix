@@ -111,3 +111,6 @@ h2 { font-size: 1.05rem; }
   .client-grid { grid-template-columns: 1fr; }
   .profile { flex-wrap: wrap; }
 }
+
+.telegram { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 25px; }
+.telegram-actions { display: flex; flex-wrap: wrap; gap: 8px; }

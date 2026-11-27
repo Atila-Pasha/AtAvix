@@ -79,10 +79,11 @@ jobs:
         if: matrix.database == 'sqlite'
         run: |
           set -euo pipefail
-          printf '%s\n' 2 18080 https://panel.example.com https://sub.example.com yes 127.0.0.1 18443 panel.example.com 18444 | sudo ./main configure
+          printf '%s\n' 2 18080 https://panel.example.com https://sub.example.com yes 127.0.0.1 18443 panel.example.com 18444 yes 127.0.0.1 18445 sub.example.com | sudo ./main configure
           curl -fsS http://127.0.0.1:18080/healthz -o /dev/null
           timeout 3 bash -c '</dev/tcp/127.0.0.1/18443'
           timeout 3 bash -c '</dev/tcp/127.0.0.1/18444'
+          timeout 3 bash -c '</dev/tcp/127.0.0.1/18445'
       - name: Show service logs on failure
         if: failure()
         run: timeout 5s sudo ./main logs || true

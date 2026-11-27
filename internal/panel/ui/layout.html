@@ -191,6 +191,10 @@
       <h2>Subscription</h2>
       <label class="field-label" for="subscription-link">Subscription link</label>
       <div class="copy-field"><input type="text" id="subscription-link" readonly value="{{.User.Link}}"><button class="button secondary-button" type="button" data-copy="{{.User.Link}}">Copy link</button></div>
+      {{if .TelegramLink}}
+      <label class="field-label" for="telegram-link">Telegram proxy link</label>
+      <div class="copy-field"><input type="text" id="telegram-link" readonly value="{{.TelegramLink}}"><button class="button secondary-button" type="button" data-copy="{{.TelegramLink}}">Copy proxy link</button></div>
+      {{end}}
       <label class="field-label" for="connection-uuid">Connection UUID</label>
       <div class="copy-field"><input type="text" id="connection-uuid" readonly value="{{.User.ID}}"><button class="button secondary-button" type="button" data-copy="{{.User.ID}}">Copy UUID</button></div>
     </section>

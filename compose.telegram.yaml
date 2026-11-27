@@ -1,0 +1,9 @@
+services:
+  panel:
+    environment:
+      TELEGRAM_LISTEN: 0.0.0.0:8445
+      TELEGRAM_PUBLIC: ${ATAVIX_TELEGRAM_PUBLIC:?Set a public Telegram endpoint}
+      TELEGRAM_SERVER_NAME: ${ATAVIX_TELEGRAM_SNI:?Set a Telegram TLS cover hostname}
+      TELEGRAM_COVER: ${ATAVIX_TELEGRAM_COVER:?Set a Telegram TLS cover address}
+    ports:
+      - "${ATAVIX_TELEGRAM_PORT:?Set a public Telegram TCP port}:8445/tcp"

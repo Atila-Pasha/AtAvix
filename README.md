@@ -8,6 +8,7 @@ AtAvix is a self-hosted control panel for VLESS subscriptions. The English-langu
 - Share one subscription link per user. Each connection profile combines your remark with the operator name. The subscription also includes a display-only balance such as `2.6 of 20 GB`, recalculated on every refresh. All profiles share the same quota. You can publish additional routes with operator names in their remarks.
 - Use one hostname for everything or separate the admin panel and client connections, for example `https://panel.example.com/admin/` and `https://sub.example.com/<subscription-uuid>`.
 - Choose SQLite or a managed PostgreSQL container during setup.
+- Optionally issue each account a private Telegram MTProto link with the same quota as VLESS.
 - Optionally record domain names for individual users. Tracking starts off and can be disabled or cleared independently for each account.
 
 ## Requirements
@@ -123,6 +124,15 @@ Open **Settings → Operator profiles**. Test a route from a connection on the i
 
 Routes are emitted in the order shown in Settings. Up to 12 operator profiles can be published, plus the balance profile. Each operator route needs a distinct combination of transport and endpoint. Operator routes appear when their transport is enabled. With both REALITY listeners enabled, the default suggestions are MCI (TCP + REALITY), Irancell (WebSocket + TLS), and Rightel (XHTTP + REALITY). WebSocket-only installations publish MCI and Irancell over separate WebSocket paths. Treat the labels as starting points and test them from the intended networks.
 
+### Telegram MTProto proxy
+
+1. During public setup, or with `sudo ./main configure`, enable **per-user Telegram MTProto proxies**.
+2. Choose a DNS-only hostname or a public IP, then choose a TCP port (8445 by default). Allow that port through your firewall. Telegram connects directly to this listener.
+3. Enter a TLS hostname you control. The automatic HTTPS setup can use the subscription hostname as the cover. The server must also be able to reach Telegram datacenters over TCP.
+4. Open an account's details or browser subscription. Select **Open in Telegram** or copy the private proxy link. Each account receives its own FakeTLS secret, including accounts created before Telegram was enabled.
+
+AtAvix uses the same remaining data counter for Telegram and VLESS. Telegram counts traffic at the proxy connection, including relay framing. Pausing, exhausting or deleting an account closes its active proxy connections. Telegram links are intended for Telegram and appear on the subscription page separately from the VLESS feed. Telegram message contents and destinations are not recorded by the panel. [MTProto engine](https://github.com/dolonet/mtg-multi)
+
 ### How traffic and domain activity work
 
 - A GB is 1,000,000,000 bytes. AtAvix counts uploads and downloads across all profiles, including VLESS headers and tunneled framing. Once the shared allowance is exhausted, open tunnels close and new connections are rejected. The dashboard and subscriptions read the current in-memory counter.
@@ -148,7 +158,7 @@ Use one AtAvix panel process per database. Configuration changes preserve the ch
 
 ### Back up and restore
 
-Backups contain connection credentials, the REALITY private key when enabled, traffic records, and any recorded domain activity. Store them privately.
+Backups contain connection credentials, the REALITY and Telegram identities when enabled, traffic records, and any recorded domain activity. Store them privately.
 
 **SQLite**
 
@@ -232,6 +242,8 @@ This uses `http://127.0.0.1:8080/admin/`, the `admin` username, and `atavix.sqli
 | `REALITY_PUBLIC`, `REALITY_SERVER_NAME` | Enable REALITY with a public `host:port` and cover TLS hostname |
 | `REALITY_LISTEN`, `REALITY_TARGET` | Listener IP and port (default `0.0.0.0:8443`) and cover address (default `REALITY_SERVER_NAME:443`) |
 | `XHTTP_PUBLIC`, `XHTTP_LISTEN` | Optional second REALITY endpoint for XHTTP, with listen address defaulting to `0.0.0.0:8444` |
+| `TELEGRAM_PUBLIC`, `TELEGRAM_LISTEN` | Enable Telegram at a public `host:port` with a listener defaulting to `0.0.0.0:8445` |
+| `TELEGRAM_SERVER_NAME`, `TELEGRAM_COVER` | Telegram TLS cover hostname and optional internal cover address, defaulting to `TELEGRAM_SERVER_NAME:443` |
 | `TRUST_PROXY` | Enable only behind a trusted reverse proxy that overwrites `X-Atavix-Client-IP` |
 
 Run `go test ./...` for the SQLite and subscription tests. Set `TEST_POSTGRES_URL` to run the accounting test against a disposable PostgreSQL database. Set `XRAY_TEST_BINARY` to run the WebSocket, TCP + REALITY, and XHTTP + REALITY connection tests against `example.com`.

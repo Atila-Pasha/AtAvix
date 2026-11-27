@@ -62,6 +62,18 @@ func run(ctx context.Context) error {
 	}
 	defer listener.Close()
 
+	var telegram *panel.TelegramServer
+	var telegramServed <-chan error
+	if cfg.Telegram != nil {
+		telegram, err = panel.StartTelegram(startup, reg, cfg.Telegram)
+		if err != nil {
+			return err
+		}
+		defer telegram.Close()
+		telegramServed = telegram.Done()
+		slog.Info("Telegram proxy is enabled", "endpoint", cfg.Telegram.Public)
+	}
+
 	checkpointCtx, cancelCheckpoints := context.WithCancel(context.Background())
 	defer cancelCheckpoints()
 	checkpointsDone := make(chan struct{})
@@ -90,6 +102,7 @@ func run(ctx context.Context) error {
 		err = core.Err()
 	case err = <-served:
 	case err = <-rawServed:
+	case err = <-telegramServed:
 	}
 	if raw != nil {
 		raw.Close()
@@ -100,6 +113,9 @@ func run(ctx context.Context) error {
 	if shutdownErr := server.Shutdown(shutdown); shutdownErr != nil {
 		server.Close()
 		err = errors.Join(err, shutdownErr)
+	}
+	if telegram != nil {
+		telegram.Close()
 	}
 	cancelCheckpoints()
 	<-checkpointsDone

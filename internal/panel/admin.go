@@ -62,6 +62,7 @@ type pageData struct {
 	TotalUsers, ActiveUsers                                        int
 	Used, Allocated                                                int64
 	Domains                                                        []Domain
+	TelegramLink                                                   string
 	PanelURL, SubscriptionURL, ProxyURL, Database, RealityEndpoint string
 	OperatorRoutes                                                 []OperatorRoute
 	OperatorError                                                  string
@@ -332,7 +333,7 @@ func (a *admin) showDetail(w http.ResponseWriter, r *http.Request, status int, u
 			message = "Domain activity is temporarily unavailable."
 		}
 	}
-	a.render(w, status, pageData{Page: "detail", Title: u.Username, User: a.row(u), Error: message, Domains: domains})
+	a.render(w, status, pageData{Page: "detail", Title: u.Username, User: a.row(u), Error: message, Domains: domains, TelegramLink: a.cfg.Telegram.link(u.ID)})
 }
 
 func (a *admin) detail(w http.ResponseWriter, r *http.Request) {

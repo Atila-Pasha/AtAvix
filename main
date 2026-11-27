@@ -276,6 +276,62 @@ configure_reality() {
     done
 }
 
+configure_telegram() {
+    telegram_public=''
+    telegram_port=''
+    telegram_sni=''
+    telegram_cover=''
+    if [[ "$access" == local ]]; then return; fi
+
+    local previous_public='' previous_port='' previous_sni='' default=no
+    if [[ -f .env ]]; then
+        previous_public=$(setting ATAVIX_TELEGRAM_PUBLIC)
+        previous_port=$(setting ATAVIX_TELEGRAM_PORT)
+        previous_sni=$(setting ATAVIX_TELEGRAM_SNI)
+        if [[ -n "$previous_public" ]]; then default=yes; fi
+    fi
+    while true; do
+        prompt "Enable per-user Telegram MTProto proxies? (yes/no)" "$default"
+        case "${REPLY,,}" in
+            y|yes) break ;;
+            n|no) return ;;
+        esac
+    done
+
+    local sub_host=${sub_url#https://}
+    sub_host=${sub_host%%:*}
+    local suggested_host=${reality_public%:*}
+    local public_host previous_host=${previous_public%:*}
+    while true; do
+        prompt "Telegram public DNS-only hostname or IPv4" "${previous_host:-${suggested_host:-$sub_host}}"
+        public_host=$REPLY
+        public_host=${public_host,,}
+        if valid_domain "$public_host"; then break; fi
+        printf 'Enter the hostname or IPv4 address that points directly to this server.\n'
+    done
+    while true; do
+        prompt "Public Telegram TCP port" "${previous_port:-8445}"
+        if valid_port "$REPLY" && [[ "$REPLY" != "$reality_port" && "$REPLY" != "$xhttp_port" && "$REPLY" != "$port" ]] &&
+            { [[ "$access" != automatic ]] || [[ "$REPLY" != 80 && "$REPLY" != 443 ]]; }; then
+            telegram_port=$REPLY
+            break
+        fi
+        printf 'Choose a TCP port separate from other listeners.\n'
+    done
+    ask_domain "Telegram TLS cover hostname you control" "${previous_sni:-$sub_host}"
+    telegram_sni=$REPLY
+    telegram_public="$public_host:$telegram_port"
+    telegram_cover="$telegram_sni:443"
+    if [[ "$access" == automatic && ( "$telegram_sni" == "$panel_domain" || "$telegram_sni" == "$sub_host" ) ]]; then
+        telegram_cover=caddy:443
+    elif [[ "$telegram_sni" == "$sub_host" ]]; then
+        local sub_authority=${sub_url#https://}
+        telegram_cover="$sub_authority"
+        if [[ "$sub_authority" == "$sub_host" ]]; then telegram_cover="$sub_host:443"; fi
+    fi
+    printf 'Allow inbound TCP %s for Telegram MTProto.\n' "$telegram_port"
+}
+
 save_settings() {
     local next
     next=$(mktemp .env.XXXXXX)
@@ -299,6 +355,10 @@ ATAVIX_REALITY_SNI=$reality_sni
 ATAVIX_REALITY_TARGET=$reality_target
 ATAVIX_XHTTP_PUBLIC=$xhttp_public
 ATAVIX_XHTTP_PORT=$xhttp_port
+ATAVIX_TELEGRAM_PUBLIC=$telegram_public
+ATAVIX_TELEGRAM_PORT=$telegram_port
+ATAVIX_TELEGRAM_SNI=$telegram_sni
+ATAVIX_TELEGRAM_COVER=$telegram_cover
 SETTINGS
     chmod 0600 "$next"
     mv -f -- "$next" .env
@@ -314,6 +374,7 @@ compose() {
     fi
     if [[ -n $(setting ATAVIX_REALITY_PUBLIC) ]]; then files+=(-f compose.reality.yaml); fi
     if [[ -n $(setting ATAVIX_XHTTP_PUBLIC) ]]; then files+=(-f compose.xhttp.yaml); fi
+    if [[ -n $(setting ATAVIX_TELEGRAM_PUBLIC) ]]; then files+=(-f compose.telegram.yaml); fi
     docker compose --env-file .env "${files[@]}" "$@"
 }
 
@@ -344,6 +405,7 @@ setup() {
     done
     configure_endpoints
     configure_reality
+    configure_telegram
     while true; do
         prompt "Administrator username" admin
         if [[ "$REPLY" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{2,31}$ ]]; then admin=$REPLY; break; fi
@@ -379,6 +441,7 @@ case "$command_name" in
         db_password=$(setting ATAVIX_POSTGRES_PASSWORD)
         configure_endpoints
         configure_reality
+        configure_telegram
         save_settings
         start ;;
     status) compose ps ;;

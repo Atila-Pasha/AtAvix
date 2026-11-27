@@ -61,6 +61,16 @@
       <p class="hint">Add the URL as a subscription in your client to keep profiles and the remaining balance up to date.</p>
     </section>
 
+    {{if .TelegramLink}}
+    <section class="card telegram" aria-labelledby="telegram-heading">
+      <div><h2 id="telegram-heading">Telegram proxy</h2><p class="hint">Uses the same data allowance as your connection profiles.</p></div>
+      <div class="telegram-actions">
+        <a class="button primary" href="{{.TelegramLink}}">Open in Telegram <span aria-hidden="true">↗</span></a>
+        <button class="button" type="button" data-copy="{{.TelegramLink}}">Copy proxy link</button>
+      </div>
+    </section>
+    {{end}}
+
     <section aria-labelledby="profiles-heading">
       <header class="profiles-heading">
         <h2 id="profiles-heading">Connection profiles</h2>

@@ -16,6 +16,7 @@ type Config struct {
 	PanelURL, SubscriptionURL, ProxyURL       *url.URL
 	PasswordHash                              []byte
 	Reality                                   *Reality
+	Telegram                                  *Telegram
 }
 
 func ReadConfig() (Config, error) {
@@ -43,6 +44,10 @@ func ReadConfig() (Config, error) {
 		}
 	}
 	cfg.Reality, err = readReality()
+	if err != nil {
+		return cfg, err
+	}
+	cfg.Telegram, err = readTelegram()
 	if err != nil {
 		return cfg, err
 	}

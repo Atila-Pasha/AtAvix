@@ -28,6 +28,7 @@ RUN apk add --no-cache ca-certificates && \
     chown -R atavix:atavix /data
 COPY --from=build /out/atavix /usr/local/bin/atavix
 COPY --from=xray /out/xray /usr/local/bin/xray
+COPY LICENSES/mtg-multi.txt /usr/share/licenses/atavix/mtg-multi.txt
 USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/atavix"]

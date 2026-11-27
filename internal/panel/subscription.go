@@ -25,6 +25,7 @@ type subscriptionPage struct {
 	ShareURL                         string
 	CopyList                         string
 	AndroidLink, HiddifySubscription template.URL
+	TelegramLink                     template.URL
 }
 
 // Both clients register this action. v2rayNG also parses a URL-safe Base64 list.
@@ -88,6 +89,7 @@ func serveSubscription(reg *Registry, cfg Config) http.HandlerFunc {
 				User: u, Profiles: profiles, ShareURL: raw, CopyList: body,
 				AndroidLink:         clientImport("v2rayng", base64.RawURLEncoding.EncodeToString([]byte(body))),
 				HiddifySubscription: clientImport("hiddify", raw),
+				TelegramLink:        template.URL(cfg.Telegram.link(u.ID)),
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if err := templates.ExecuteTemplate(w, "subscription", data); err != nil {
