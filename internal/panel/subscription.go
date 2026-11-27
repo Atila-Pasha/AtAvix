@@ -20,11 +20,37 @@ const usageOnlyAddress = "balance.atavix.invalid:1"
 var usageOnlyID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(usageOnlyAddress))
 
 type subscriptionPage struct {
-	User        User
-	Profiles    []connectionProfile
-	ShareURL    string
-	CopyList    string
-	AndroidLink template.URL
+	User                             User
+	Profiles                         []connectionProfile
+	ShareURL                         string
+	CopyList                         string
+	AndroidLink, HiddifySubscription template.URL
+}
+
+// Both clients register this action. v2rayNG also parses a URL-safe Base64 list.
+func clientImport(client, payload string) template.URL {
+	action := url.URL{
+		Scheme: client, Host: "install-config",
+		RawQuery: url.Values{"url": {payload}}.Encode(),
+	}
+	return template.URL(action.String())
+}
+
+func subscriptionBalance(remaining, quota int64) string {
+	scale, unit := int64(1), "B"
+	switch {
+	case quota >= 1_000_000_000:
+		scale, unit = 1_000_000_000, "GB"
+	case quota >= 1_000_000:
+		scale, unit = 1_000_000, "MB"
+	case quota >= 1_000:
+		scale, unit = 1_000, "KB"
+	}
+	format := func(value int64) string {
+		amount := strconv.FormatFloat(float64(value)/float64(scale), 'f', 2, 64)
+		return strings.TrimRight(strings.TrimRight(amount, "0"), ".")
+	}
+	return format(remaining) + " of " + format(quota) + " " + unit
 }
 
 func serveSubscription(reg *Registry, cfg Config) http.HandlerFunc {
@@ -52,17 +78,17 @@ func serveSubscription(reg *Registry, cfg Config) http.HandlerFunc {
 		// name and unrelated UUID cannot establish an AtAvix connection.
 		lines = append(lines, shareURI(usageOnlyAddress, usageOnlyID, url.Values{
 			"encryption": {"none"}, "security": {"none"}, "type": {"tcp"},
-		}, u.Username+"-"+FormatBytes(u.Remaining())))
+		}, subscriptionBalance(u.Remaining(), u.Quota)))
 		body := strings.Join(lines, "\n") + "\n"
 		w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=0", u.Uploaded, u.Used-u.Uploaded, u.Quota))
 		w.Header().Set("Profile-Update-Interval", "1")
 		if wantsSubscriptionPage(r) {
 			raw := subscriptionURL(cfg.SubscriptionURL, u) + "?format=raw"
-			android := url.URL{
-				Scheme: "v2rayng", Host: "install-config",
-				RawQuery: url.Values{"url": {raw}}.Encode(), Fragment: "AtAvix-" + u.Username,
+			data := subscriptionPage{
+				User: u, Profiles: profiles, ShareURL: raw, CopyList: body,
+				AndroidLink:         clientImport("v2rayng", base64.RawURLEncoding.EncodeToString([]byte(body))),
+				HiddifySubscription: clientImport("hiddify", raw),
 			}
-			data := subscriptionPage{u, profiles, raw, body, template.URL(android.String())}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if err := templates.ExecuteTemplate(w, "subscription", data); err != nil {
 				slog.Error("Render subscription page", "error", err)

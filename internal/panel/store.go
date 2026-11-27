@@ -64,7 +64,6 @@ func (in *UserInput) validate() error {
 }
 
 type userState struct {
-	bandwidth bandwidth
 	user      User
 	persisted int64
 	domains   map[string]int64
@@ -265,17 +264,17 @@ func (r *Registry) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *Registry) connect(id uuid.UUID, stop func()) (*bandwidth, func()) {
+func (r *Registry) connect(id uuid.UUID, stop func()) func() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	state := r.users[id]
 	if state == nil || state.user.Status() != "Active" || len(state.tunnels) >= 128 {
-		return nil, nil
+		return nil
 	}
 	r.nextTunnel++
 	key := r.nextTunnel
 	state.tunnels[key] = stop
-	return &state.bandwidth, func() {
+	return func() {
 		r.mu.Lock()
 		delete(state.tunnels, key)
 		r.mu.Unlock()

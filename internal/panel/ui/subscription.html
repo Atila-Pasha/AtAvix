@@ -30,17 +30,35 @@
     </section>
 
     <section class="card import" aria-labelledby="import-heading">
-      <h2 id="import-heading">Import subscription</h2>
-      <div class="actions">
-        <a class="button primary" href="{{.AndroidLink}}">Open in v2rayNG <span aria-hidden="true">↗</span></a>
-        <button class="button" type="button" data-copy="{{.CopyList}}">Copy profiles for v2rayN</button>
+      <h2 id="import-heading">Add to a client</h2>
+      <div class="client-grid">
+        <article class="client" data-client="v2rayng">
+          <div class="client-name"><img src="/assets/v2rayng.png" width="36" height="36" alt=""><div><h3>v2rayNG</h3><p>Android</p></div></div>
+          <span class="recommendation" hidden>Recommended for your device</span>
+          <a class="button primary" href="{{.AndroidLink}}">Import all profiles <span aria-hidden="true">↗</span></a>
+          <a class="client-download" href="https://github.com/2dust/v2rayNG/releases">Download v2rayNG</a>
+        </article>
+        <article class="client" data-client="v2rayn">
+          <div class="client-name"><img src="/assets/v2rayn.ico" width="36" height="36" alt=""><div><h3>v2rayN</h3><p>Windows, macOS, Linux</p></div></div>
+          <span class="recommendation" hidden>Recommended for your device</span>
+          <button class="button" type="button" data-copy="{{.CopyList}}">Copy all profiles</button>
+          <p class="hint">In v2rayN, import servers from the clipboard.</p>
+          <a class="client-download" href="https://github.com/2dust/v2rayN/releases">Download v2rayN</a>
+        </article>
+        <article class="client" data-client="hiddify">
+          <div class="client-name"><img src="/assets/hiddify.png" width="36" height="36" alt=""><div><h3>Hiddify</h3><p>iOS, Android, macOS, Linux, Windows</p></div></div>
+          <span class="recommendation" hidden>Recommended for your device</span>
+          <button class="button" type="button" data-copy="{{.CopyList}}">Copy all profiles</button>
+          <a class="client-download" href="{{.HiddifySubscription}}">Add as a subscription</a>
+          <a class="client-download" href="https://hiddify.com/">Download Hiddify</a>
+        </article>
       </div>
       <label class="field-label" for="subscription-url">Subscription URL</label>
       <div class="copy-field">
         <input id="subscription-url" value="{{.ShareURL}}" readonly spellcheck="false">
         <button class="button" type="button" data-copy="{{.ShareURL}}">Copy link</button>
       </div>
-      <p class="hint">Add the URL as a subscription in v2rayN to refresh profiles and the remaining balance.</p>
+      <p class="hint">Add the URL as a subscription in your client to keep profiles and the remaining balance up to date.</p>
     </section>
 
     <section aria-labelledby="profiles-heading">

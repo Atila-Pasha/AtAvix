@@ -211,6 +211,8 @@ configure_reality() {
     reality_port=''
     reality_sni=''
     reality_target=''
+    xhttp_public=''
+    xhttp_port=''
     if [[ "$access" == local ]]; then return; fi
 
     local previous_public='' previous_port=8443 previous_sni=''
@@ -256,6 +258,22 @@ configure_reality() {
         reality_target=caddy:443
     fi
     printf 'Allow inbound TCP %s for REALITY. Keep the WebSocket domain on HTTPS.\n' "$reality_port"
+    local previous_xhttp_port=''
+    if [[ -f .env ]]; then previous_xhttp_port=$(setting ATAVIX_XHTTP_PORT); fi
+    while true; do
+        prompt "Public XHTTP + REALITY port (or off)" "${previous_xhttp_port:-8444}"
+        if [[ "${REPLY,,}" == off ]]; then break; fi
+        if valid_port "$REPLY" && [[ "$REPLY" != "$reality_port" && "$REPLY" != "$port" ]] &&
+            { [[ "$access" != automatic ]] || [[ "$REPLY" != 80 && "$REPLY" != 443 ]]; }; then
+            xhttp_port=$REPLY
+            xhttp_public="$public_host:$xhttp_port"
+            printf 'Allow inbound TCP %s for XHTTP + REALITY.
+' "$xhttp_port"
+            break
+        fi
+        printf 'Choose a TCP port separate from the panel, HTTPS and direct REALITY.
+'
+    done
 }
 
 save_settings() {
@@ -279,6 +297,8 @@ ATAVIX_REALITY_PUBLIC=$reality_public
 ATAVIX_REALITY_PORT=$reality_port
 ATAVIX_REALITY_SNI=$reality_sni
 ATAVIX_REALITY_TARGET=$reality_target
+ATAVIX_XHTTP_PUBLIC=$xhttp_public
+ATAVIX_XHTTP_PORT=$xhttp_port
 SETTINGS
     chmod 0600 "$next"
     mv -f -- "$next" .env
@@ -293,6 +313,7 @@ compose() {
         files+=(-f compose.local.yaml)
     fi
     if [[ -n $(setting ATAVIX_REALITY_PUBLIC) ]]; then files+=(-f compose.reality.yaml); fi
+    if [[ -n $(setting ATAVIX_XHTTP_PUBLIC) ]]; then files+=(-f compose.xhttp.yaml); fi
     docker compose --env-file .env "${files[@]}" "$@"
 }
 

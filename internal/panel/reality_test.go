@@ -19,6 +19,11 @@ import (
 )
 
 func TestXrayReality(t *testing.T) {
+	t.Run("TCP", func(t *testing.T) { testXrayReality(t, false) })
+	t.Run("XHTTP", func(t *testing.T) { testXrayReality(t, true) })
+}
+
+func testXrayReality(t *testing.T, xhttp bool) {
 	binary := os.Getenv("XRAY_TEST_BINARY")
 	if binary == "" {
 		t.Skip("set XRAY_TEST_BINARY to exercise the REALITY listener")
@@ -45,8 +50,14 @@ func TestXrayReality(t *testing.T) {
 	defer raw.Close()
 	port := availablePort(t)
 	reality := &Reality{
-		Public: net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), ServerName: "example.com",
-		Target: target.Listener.Addr().String(), listenHost: "127.0.0.1", listenPort: port,
+		realityEndpoint: realityEndpoint{Public: net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), listenHost: "127.0.0.1", listenPort: port},
+		ServerName:      "example.com", Target: target.Listener.Addr().String(),
+	}
+	endpoint := reality.realityEndpoint
+	if xhttp {
+		port = availablePort(t)
+		reality.XHTTP = realityEndpoint{Public: net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), listenHost: "127.0.0.1", listenPort: port}
+		endpoint = reality.XHTTP
 	}
 	if err := reg.InitializeReality(ctx, reality); err != nil {
 		t.Fatal(err)
@@ -69,7 +80,7 @@ func TestXrayReality(t *testing.T) {
 	defer gateway.Close()
 	go gateway.ServeRaw(raw)
 
-	uri, err := url.Parse(reality.profileAt(reality.Public, account.ID, input.Remark))
+	uri, err := url.Parse(reality.profileAt(endpoint.Public, account.ID, input.Remark, xhttp))
 	if err != nil || uri.Fragment != input.Remark || strings.Contains(uri.String(), reality.privateKey) {
 		t.Fatal("invalid REALITY share URI or disclosure of private key")
 	}
@@ -92,6 +103,10 @@ func TestXrayReality(t *testing.T) {
 				},
 			},
 		}},
+	}
+	if xhttp {
+		stream := config["outbounds"].([]any)[0].(map[string]any)["streamSettings"].(map[string]any)
+		stream["xhttpSettings"] = map[string]string{"path": query.Get("path"), "mode": query.Get("mode")}
 	}
 	data, err := json.Marshal(config)
 	if err != nil {

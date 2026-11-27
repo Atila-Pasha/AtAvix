@@ -91,10 +91,13 @@ func validateOperatorRoutes(routes []OperatorRoute, cfg Config) ([]OperatorRoute
 
 		routeKey := ""
 		switch route.Transport {
-		case "reality":
+		case "reality", "xhttp":
 			address := route.Endpoint
 			if address == "" && cfg.Reality != nil {
 				address = cfg.Reality.Public
+				if route.Transport == "xhttp" {
+					address = cfg.Reality.XHTTP.Public
+				}
 			}
 			if address != "" {
 				host, port, err := splitEndpoint(address)
@@ -147,22 +150,31 @@ func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User
 		}
 		return connectionProfile{label, transport, profile(endpoint, u, path, label)}
 	}
-	direct := func(address, operator string) connectionProfile {
+	direct := func(address, operator string, xhttp bool) connectionProfile {
 		label := name(operator)
-		return connectionProfile{label, "TCP + REALITY", reality.profileAt(address, u.ID, label)}
+		transport := "TCP + REALITY"
+		if xhttp {
+			transport = "XHTTP + REALITY"
+		}
+		return connectionProfile{label, transport, reality.profileAt(address, u.ID, label, xhttp)}
 	}
 
 	var profiles []connectionProfile
 	for _, route := range reg.OperatorRoutes() {
 		switch route.Transport {
-		case "reality":
-			if reality != nil {
-				address := route.Endpoint
-				if address == "" {
-					address = reality.Public
-				}
-				profiles = append(profiles, direct(address, route.Operator))
+		case "reality", "xhttp":
+			isXHTTP := route.Transport == "xhttp"
+			if reality == nil || isXHTTP && reality.XHTTP.Public == "" {
+				continue
 			}
+			address := route.Endpoint
+			if address == "" {
+				address = reality.Public
+				if isXHTTP {
+					address = reality.XHTTP.Public
+				}
+			}
+			profiles = append(profiles, direct(address, route.Operator, isXHTTP))
 		case "ws":
 			endpoint := base
 			if route.Endpoint != "" {
@@ -177,10 +189,14 @@ func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User
 	}
 	if len(profiles) == 0 {
 		if reality != nil {
-			return []connectionProfile{
-				direct(reality.Public, "MCI"),
+			profiles := []connectionProfile{
+				direct(reality.Public, "MCI", false),
 				websocket(base, PrimaryPath, "Irancell"),
 			}
+			if reality.XHTTP.Public != "" {
+				profiles = append(profiles, direct(reality.XHTTP.Public, "Rightel", true))
+			}
+			return profiles
 		}
 		return []connectionProfile{
 			websocket(base, PrimaryPath, "MCI"),

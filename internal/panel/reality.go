@@ -16,12 +16,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const xhttpPath = "/stream"
+
+type realityEndpoint struct {
+	Public     string
+	listenHost string
+	listenPort int
+}
+
 type Reality struct {
-	Public, ServerName, Target string
-	listenHost                 string
-	listenPort                 int
-	privateKey, publicKey      string
-	shortID                    string
+	realityEndpoint
+	XHTTP                 realityEndpoint
+	ServerName, Target    string
+	privateKey, publicKey string
+	shortID               string
 }
 
 func readReality() (*Reality, error) {
@@ -29,9 +37,9 @@ func readReality() (*Reality, error) {
 	if public == "" {
 		return nil, nil
 	}
-	host, _, err := splitEndpoint(public)
-	if err != nil || (net.ParseIP(host) == nil && normalizedHostname(host) == "") {
-		return nil, errors.New("REALITY_PUBLIC must contain a public hostname or IP and TCP port")
+	direct, err := parseRealityEndpoint(public, env("REALITY_LISTEN", "0.0.0.0:8443"))
+	if err != nil {
+		return nil, fmt.Errorf("REALITY_PUBLIC / REALITY_LISTEN: %w", err)
 	}
 	sni := normalizedHostname(env("REALITY_SERVER_NAME", ""))
 	if sni == "" {
@@ -41,11 +49,27 @@ func readReality() (*Reality, error) {
 	if _, _, err := splitEndpoint(target); err != nil {
 		return nil, fmt.Errorf("REALITY_TARGET: %w", err)
 	}
-	listenHost, listenPort, err := splitEndpoint(env("REALITY_LISTEN", "0.0.0.0:8443"))
-	if err != nil || net.ParseIP(listenHost) == nil {
-		return nil, errors.New("REALITY_LISTEN must contain a listen IP and TCP port")
+	transport := &Reality{realityEndpoint: direct, ServerName: sni, Target: target}
+	if public := env("XHTTP_PUBLIC", ""); public != "" {
+		transport.XHTTP, err = parseRealityEndpoint(public, env("XHTTP_LISTEN", "0.0.0.0:8444"))
+		if err != nil {
+			return nil, fmt.Errorf("XHTTP_PUBLIC / XHTTP_LISTEN: %w", err)
+		}
+		if direct.listenPort == transport.XHTTP.listenPort {
+			return nil, errors.New("XHTTP_LISTEN must use a separate TCP port")
+		}
 	}
-	return &Reality{Public: public, ServerName: sni, Target: target, listenHost: listenHost, listenPort: listenPort}, nil
+	return transport, nil
+}
+
+func parseRealityEndpoint(public, listen string) (realityEndpoint, error) {
+	host, _, err := splitEndpoint(public)
+	listenHost, listenPort, listenErr := splitEndpoint(listen)
+	if err != nil || (net.ParseIP(host) == nil && normalizedHostname(host) == "") ||
+		listenErr != nil || net.ParseIP(listenHost) == nil {
+		return realityEndpoint{}, errors.New("enter a public hostname or IP and port, and a listen IP and port")
+	}
+	return realityEndpoint{Public: public, listenHost: listenHost, listenPort: listenPort}, nil
 }
 
 func splitEndpoint(s string) (string, int, error) {
@@ -100,10 +124,15 @@ func (r *Registry) InitializeReality(ctx context.Context, transport *Reality) er
 	return nil
 }
 
-func (r *Reality) profileAt(address string, id uuid.UUID, name string) string {
+func (r *Reality) profileAt(address string, id uuid.UUID, name string, xhttp bool) string {
 	query := url.Values{
 		"encryption": {"none"}, "security": {"reality"}, "type": {"tcp"},
 		"sni": {r.ServerName}, "fp": {"chrome"}, "pbk": {r.publicKey}, "sid": {r.shortID}, "spx": {"/"},
+	}
+	if xhttp {
+		query.Set("type", "xhttp")
+		query.Set("path", xhttpPath)
+		query.Set("mode", "auto")
 	}
 	return shareURI(address, id, query, name)
 }

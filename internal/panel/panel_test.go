@@ -90,14 +90,14 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 		}
 		marker, err := url.Parse(profiles[2])
 		if err != nil || marker.Host != usageOnlyAddress || marker.User.Username() != usageOnlyID.String() ||
-			marker.User.Username() == u.ID.String() || marker.Fragment != u.Username+"-"+expectedBalance {
+			marker.User.Username() == u.ID.String() || marker.Fragment != expectedBalance {
 			t.Fatalf("invalid balance marker: %s", profiles[2])
 		}
 	}
-	checkProfiles("10 GB", "upload=0; download=0; total=10000000000; expire=0")
+	checkProfiles("10 of 10 GB", "upload=0; download=0; total=10000000000; expire=0")
 	reg.charge(u.ID, 1_000_000_000, true)
 	reg.charge(u.ID, 1_500_000_000, false)
-	checkProfiles("7.5 GB", "upload=1000000000; download=1500000000; total=10000000000; expire=0")
+	checkProfiles("7.5 of 10 GB", "upload=1000000000; download=1500000000; total=10000000000; expire=0")
 	reg.observe(u.ID, "example.com")
 	if err := reg.Flush(ctx); err != nil {
 		t.Fatal(err)
@@ -124,30 +124,17 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 		t.Fatalf("disabling tracking kept activity: %v, %v", domains, err)
 	}
 	stopped := false
-	limit, release := reg.connect(u.ID, func() { stopped = true })
-	if limit == nil {
+	release := reg.connect(u.ID, func() { stopped = true })
+	if release == nil {
 		t.Fatal("could not open a tunnel with quota remaining")
 	}
 	defer release()
-	second, releaseSecond := reg.connect(u.ID, func() {})
-	if second != limit {
-		t.Fatal("concurrent tunnels did not share the same bandwidth bucket")
-	}
-	defer releaseSecond()
-	now := time.Now()
-	if limit.acquire(relayChunk, now) != 0 || second.acquire(relayChunk, now) != 0 {
-		t.Fatal("initial burst was unexpectedly shaped")
-	}
-	expected := time.Duration(relayChunk * int64(time.Second) / bytesPerSec)
-	if delay := second.acquire(relayChunk, now); delay != expected {
-		t.Fatalf("bandwidth delay: got %v, want %v", delay, expected)
-	}
 	granted, exhausted := reg.charge(u.ID, 5, false)
 	reg.stopExhausted(u.ID)
 	if granted != 2 || !exhausted || !stopped {
 		t.Fatalf("quota did not terminate the tunnel: %d %v %v", granted, exhausted, stopped)
 	}
-	if limit, _ := reg.connect(u.ID, func() {}); limit != nil {
+	if release := reg.connect(u.ID, func() {}); release != nil {
 		t.Fatal("exhausted account was allowed to connect")
 	}
 }

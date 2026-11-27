@@ -34,23 +34,34 @@ func StartCore(ctx context.Context, binary string, reality *Reality, forwardPort
 
 	var ingress string
 	if reality != nil {
-		data, err := json.Marshal(map[string]any{
-			"listen": reality.listenHost, "port": reality.listenPort, "protocol": "tunnel",
-			"settings": map[string]any{"allowedNetwork": "tcp", "rewriteAddress": "127.0.0.1", "rewritePort": forwardPort},
-			"streamSettings": map[string]any{
-				"network": "raw", "security": "reality",
+		inbound := func(endpoint realityEndpoint, network string) map[string]any {
+			stream := map[string]any{
+				"network": network, "security": "reality",
 				"realitySettings": map[string]any{
 					"target": reality.Target, "serverNames": []string{reality.ServerName},
 					"privateKey": reality.privateKey, "shortIds": []string{reality.shortID},
 				},
-			},
-		})
+			}
+			if network == "xhttp" {
+				stream["xhttpSettings"] = map[string]string{"path": xhttpPath, "mode": "auto"}
+			}
+			return map[string]any{
+				"listen": endpoint.listenHost, "port": endpoint.listenPort, "protocol": "tunnel",
+				"settings":       map[string]any{"allowedNetwork": "tcp", "rewriteAddress": "127.0.0.1", "rewritePort": forwardPort},
+				"streamSettings": stream,
+			}
+		}
+		inbounds := []map[string]any{inbound(reality.realityEndpoint, "raw")}
+		if reality.XHTTP.Public != "" {
+			inbounds = append(inbounds, inbound(reality.XHTTP, "xhttp"))
+		}
+		data, err := json.Marshal(inbounds)
 		if err != nil {
 			cancel()
 			os.RemoveAll(dir)
 			return nil, err
 		}
-		ingress = "," + string(data)
+		ingress = "," + string(data[1:len(data)-1])
 	}
 	config := fmt.Sprintf(xrayConfig, core.Socket, core.InternalID.String(), ingress)
 	path := filepath.Join(dir, "xray.json")

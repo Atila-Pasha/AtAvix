@@ -22,13 +22,17 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 	defer reg.Close()
 
 	u, err := reg.Save(t.Context(), uuid.Nil, UserInput{
-		Username: "mobile-user", Remark: "North & West", Quota: 10_000_000_000, Enabled: true,
+		Username: "mobile-user", Remark: "North & West", Quota: 20_000_000_000, Enabled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	base, _ := url.Parse("https://sub.example.org:2053")
-	reality := &Reality{Public: "vpn.example.org:7443", ServerName: "sub.example.org"}
+	reg.charge(u.ID, 17_400_000_000, true)
+	reality := &Reality{
+		realityEndpoint: realityEndpoint{Public: "vpn.example.org:7443"},
+		XHTTP:           realityEndpoint{Public: "vpn.example.org:7444"}, ServerName: "sub.example.org",
+	}
 	if err := reg.InitializeReality(t.Context(), reality); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +53,7 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 		browser.Header().Get("Referrer-Policy") != "no-referrer" {
 		t.Fatalf("unexpected browser response headers: %d %v", browser.Code, browser.Header())
 	}
-	for _, fragment := range []string{"North &amp; West (MCI)", "North &amp; West (Irancell)", "Data remaining", "/assets/subscription.css"} {
+	for _, fragment := range []string{"North &amp; West (MCI)", "North &amp; West (Irancell)", "North &amp; West (Rightel)", "Data remaining", "/assets/subscription.css"} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("subscription page missing %q", fragment)
 		}
@@ -59,7 +63,7 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 		t.Fatal("missing Android import action")
 	}
 	action, err := url.Parse(html.UnescapeString(android[1]))
-	if err != nil || action.Host != "install-config" || action.Query().Get("url") != base.String()+path+"?format=raw" {
+	if err != nil || action.Host != "install-config" {
 		t.Fatalf("invalid Android import action: %v", err)
 	}
 
@@ -74,15 +78,30 @@ func TestSubscriptionPageAndClientImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(decoded)), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected two connection profiles and an informational row, got %d", len(lines))
+	batch, err := base64.RawURLEncoding.DecodeString(action.Query().Get("url"))
+	if err != nil || string(batch) != string(decoded) {
+		t.Fatal("Android action must import the exact profile list")
 	}
-	for i, expected := range []string{"reality", "tls", "none"} {
+	if !strings.Contains(body, "hiddify://install-config?url="+url.QueryEscape(base.String()+path+"?format=raw")) {
+		t.Fatal("Hiddify subscription action must receive the raw subscription URL")
+	}
+	lines := strings.Split(strings.TrimSpace(string(decoded)), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected three connection profiles and an informational row, got %d", len(lines))
+	}
+	for i, expected := range []string{"reality", "tls", "reality", "none"} {
 		profile, err := url.Parse(lines[i])
 		if err != nil || profile.Query().Get("security") != expected {
 			t.Fatalf("unexpected transport security at row %d: %v", i, err)
 		}
+	}
+	balance, err := url.Parse(lines[3])
+	if err != nil || balance.Fragment != "2.6 of 20 GB" || balance.Host != usageOnlyAddress {
+		t.Fatal("invalid display-only quota line")
+	}
+	xhttp, err := url.Parse(lines[2])
+	if err != nil || xhttp.Query().Get("type") != "xhttp" || xhttp.Query().Get("path") != xhttpPath {
+		t.Fatal("expected a distinct XHTTP profile")
 	}
 	if _, ok := reg.find(usageOnlyID, false); ok {
 		t.Fatal("usage-only UUID resolves to a real account")

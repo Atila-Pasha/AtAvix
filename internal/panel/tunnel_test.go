@@ -14,13 +14,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func TestGatewaySharesBandwidthAcrossTransports(t *testing.T) {
+func TestGatewaySharesQuotaAcrossTransports(t *testing.T) {
 	reg, err := OpenRegistry(t.Context(), "sqlite3", filepath.Join(t.TempDir(), "panel.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reg.Close()
-	account, err := reg.Save(t.Context(), uuid.Nil, UserInput{Username: "speed-test", Remark: "Speed test", Enabled: true, Quota: 10_000_000})
+	account, err := reg.Save(t.Context(), uuid.Nil, UserInput{Username: "quota-test", Remark: "Quota test", Enabled: true, Quota: 10_000_000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,14 +93,8 @@ func TestGatewaySharesBandwidthAcrossTransports(t *testing.T) {
 		}
 	}
 	want := int64(len(streams) * (payloadSize*2 + headerSize))
-	elapsed := time.Since(start)
-	minimum := time.Duration(want-bandwidthBurst) * time.Second / bytesPerSec
-	if elapsed < minimum-10*time.Millisecond {
-		t.Fatalf("traffic exceeded the account rate: %d bytes in %v, expected at least %v", want, elapsed, minimum)
-	}
 	latest, _ := reg.find(account.ID, false)
 	if latest.Used != want {
 		t.Fatalf("shared quota accounted for %d bytes, want %d", latest.Used, want)
 	}
-	t.Logf("shared rate %.2f Mbps across both transports", float64(want)*8/elapsed.Seconds()/1e6)
 }

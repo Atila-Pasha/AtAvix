@@ -1,0 +1,7 @@
+services:
+  panel:
+    environment:
+      XHTTP_LISTEN: 0.0.0.0:8444
+      XHTTP_PUBLIC: ${ATAVIX_XHTTP_PUBLIC:?Set a public XHTTP endpoint}
+    ports:
+      - "${ATAVIX_XHTTP_PORT:?Set a public XHTTP TCP port}:8444/tcp"

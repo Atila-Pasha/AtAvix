@@ -63,3 +63,25 @@ if (operatorRows) {
 
   updateOperatorLimit();
 }
+
+const clientGrid = document.querySelector(".client-grid");
+if (clientGrid) {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  const agent = navigator.userAgent;
+  let client;
+  if (/Android/i.test(agent + platform)) {
+    client = "v2rayng";
+  } else if (/iPad|iPhone|iPod/i.test(agent + platform) ||
+             (/Mac/i.test(platform) && navigator.maxTouchPoints > 1)) {
+    client = "hiddify";
+  } else if (/Win/i.test(platform) || /Windows/i.test(agent)) {
+    client = "v2rayn";
+  } else if (/Mac|Linux/i.test(platform)) {
+    client = "hiddify";
+  }
+  const recommendation = clientGrid.querySelector(`[data-client="${client}"]`);
+  if (recommendation) {
+    recommendation.querySelector(".recommendation").hidden = false;
+    clientGrid.prepend(recommendation);
+  }
+}

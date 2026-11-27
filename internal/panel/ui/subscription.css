@@ -54,8 +54,7 @@ progress { width: 100%; height: 7px; margin: 4px 0; accent-color: var(--accent);
 .card { border: 1px solid var(--border); border-radius: 14px; background: #1c1625; padding: 17px 20px; }
 .import { margin-bottom: 25px; }
 h2 { font-size: 1.05rem; }
-.actions, .copy-field, .profile { display: flex; align-items: center; gap: 9px; }
-.actions { flex-wrap: wrap; margin: 13px 0 19px; }
+.copy-field, .profile { display: flex; align-items: center; gap: 9px; }
 .button {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   min-height: 39px; padding: 8px 12px; border-radius: 8px; background: #282035;
@@ -90,4 +89,25 @@ h2 { font-size: 1.05rem; }
   .account { grid-template-columns: 1fr; gap: 20px; }
   .card { padding: 14px; }
   .profile { align-items: start; }
+}
+
+.client-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 18px;
+}
+.client {
+  display: flex; align-items: start; flex-direction: column; gap: 10px;
+  border: 1px solid var(--border); border-radius: 10px; padding: 13px; background: #15101d;
+}
+.client:has(.recommendation:not([hidden])) { border-color: #8a60c8; background: #231831; }
+.client-name { display: flex; gap: 10px; align-items: center; }
+.client-name img { object-fit: contain; flex: none; }
+.client-name h3 { font-size: .94rem; }
+.client-name p, .recommendation, .client-download { font-size: .75rem; line-height: 1.35; }
+.client-name p { color: var(--muted); }
+.client .hint { margin-top: 0; font-size: .75rem; }
+.client-download { margin-top: auto; color: var(--accent); text-underline-offset: 3px; }
+.recommendation { color: var(--accent); }
+@media (max-width: 630px) {
+  .client-grid { grid-template-columns: 1fr; }
+  .profile { flex-wrap: wrap; }
 }

@@ -64,7 +64,6 @@
             <div><dt>WebSocket endpoint</dt><dd>{{.ProxyURL}}</dd></div>
             <div><dt>REALITY endpoint</dt><dd>{{.RealityEndpoint}}</dd></div>
             <div><dt>Database</dt><dd>{{.Database}}</dd></div>
-            <div><dt>Speed limit per user</dt><dd>{{.SpeedMbps}} Mbps</dd></div>
           </dl>
           <p class="secondary">Edit the installation configuration and restart AtAvix to change these values.</p>
         </section>
@@ -211,11 +210,11 @@
       {{if .User.TrackDomains}}
         <p class="secondary">Domain names sent by the client. Last 7 days, up to 100 domains.</p>
         {{if .Domains}}
-          <dl class="info-list">
+          <div class="activity-scroll" tabindex="0" role="region" aria-label="Recent domains"><dl class="info-list">
           {{range .Domains}}
             <div><dt>{{.Hostname}}</dt><dd><time datetime="{{.Seen.Format "2006-01-02T15:04:05Z07:00"}}">{{.Seen.Format "Jan 2, 15:04"}} UTC</time></dd></div>
           {{end}}
-          </dl>
+          </dl></div>
         {{else}}<p class="empty-note">No domain activity recorded.</p>{{end}}
       {{else}}
         <p class="empty-note">Domain tracking is off for this account.</p>
@@ -235,7 +234,7 @@
 {{define "operatorSettings"}}
   <section class="panel info-panel operator-panel" aria-labelledby="operator-heading">
     <h2 id="operator-heading">Operator profiles</h2>
-    <p class="secondary">Add a route for each operator you have tested. A user with the remark “Home” sees a name like “Home (Irancell)”. An empty list publishes the default MCI and Irancell profiles.</p>
+    <p class="secondary">Add a route for each operator you have tested. A user with the remark “Home” sees a name like “Home (Irancell)”. An empty list publishes the default operator profiles.</p>
     <p class="secondary" id="operator-hint">Leave the public endpoint blank to use the installation endpoint. A custom endpoint must forward to this AtAvix instance.</p>
     {{if .OperatorError}}<p class="alert" role="alert">{{.OperatorError}}</p>{{end}}
     {{if .OperatorSaved}}<p class="save-notice" role="status">Operator profiles saved. Clients can refresh their subscriptions.</p>{{end}}
@@ -262,6 +261,7 @@
     <label>Transport<select name="transport">
       <option value="ws" {{if eq .Transport "ws"}}selected{{end}}>WebSocket</option>
       <option value="reality" {{if eq .Transport "reality"}}selected{{end}}>TCP + REALITY</option>
+      <option value="xhttp" {{if eq .Transport "xhttp"}}selected{{end}}>XHTTP + REALITY</option>
     </select></label>
     <label>Public endpoint<input name="endpoint" value="{{.Endpoint}}" placeholder="Default endpoint" maxlength="300" aria-describedby="operator-hint"></label>
     <button class="icon-button" type="button" data-remove-operator aria-label="Remove operator route" title="Remove operator route">×</button>

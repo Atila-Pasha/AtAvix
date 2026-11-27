@@ -263,3 +263,7 @@ dialog p { font-size: 13px; line-height: 1.5; margin-bottom: 15px; }
   .user-link strong, .user-link small { max-width: 150px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.activity-scroll { max-height: 20rem; overflow: auto; }
+.activity-scroll dt { min-width: 0; overflow-wrap: anywhere; }
+.activity-scroll:focus-visible { outline: 2px solid #bc9afa; outline-offset: 2px; }

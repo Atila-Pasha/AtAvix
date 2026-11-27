@@ -20,6 +20,7 @@ import (
 const (
 	PrimaryPath   = "/connect"
 	AlternatePath = "/fallback"
+	relayChunk    = 16 << 10
 )
 
 var hostnameLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -155,8 +156,8 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	if err != nil {
 		return
 	}
-	limit, release := g.reg.connect(id, cancel)
-	if limit == nil {
+	release := g.reg.connect(id, cancel)
+	if release == nil {
 		return
 	}
 	defer release()
@@ -170,7 +171,7 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	stopCore := context.AfterFunc(ctx, func() { core.Close() })
 	defer stopCore()
 	copy(header[1:17], g.internalID[:])
-	if !g.send(ctx, limit, id, core, header, true) {
+	if !g.send(id, core, header, true) {
 		return
 	}
 	g.reg.observe(id, host)
@@ -178,10 +179,10 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		g.relay(ctx, limit, id, core, client, false)
+		g.relay(id, core, client, false)
 		cancel()
 	}()
-	if err := g.relay(ctx, limit, id, client, core, true); err == io.EOF {
+	if err := g.relay(id, client, core, true); err == io.EOF {
 		// A TCP client may finish sending and still expect a reply.
 		if _, raw := client.(net.Conn); raw {
 			core.(*net.UnixConn).CloseWrite()
@@ -193,11 +194,11 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	<-finished
 }
 
-func (g *Gateway) relay(ctx context.Context, limit *bandwidth, id uuid.UUID, source io.Reader, target tunnelStream, upload bool) error {
+func (g *Gateway) relay(id uuid.UUID, source io.Reader, target tunnelStream, upload bool) error {
 	buffer := make([]byte, relayChunk)
 	for {
 		n, err := source.Read(buffer)
-		if n > 0 && !g.send(ctx, limit, id, target, buffer[:n], upload) {
+		if n > 0 && !g.send(id, target, buffer[:n], upload) {
 			return io.ErrClosedPipe
 		}
 		if err != nil {
@@ -206,10 +207,7 @@ func (g *Gateway) relay(ctx context.Context, limit *bandwidth, id uuid.UUID, sou
 	}
 }
 
-func (g *Gateway) send(ctx context.Context, limit *bandwidth, id uuid.UUID, target tunnelStream, payload []byte, upload bool) bool {
-	if err := limit.wait(ctx, len(payload)); err != nil {
-		return false
-	}
+func (g *Gateway) send(id uuid.UUID, target tunnelStream, payload []byte, upload bool) bool {
 	allowed, exhausted := g.reg.charge(id, len(payload), upload)
 	if allowed == 0 {
 		return false

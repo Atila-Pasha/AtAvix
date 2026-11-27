@@ -45,9 +45,9 @@ jobs:
           profiles=$(curl -fsS "$link" | base64 --decode)
           [[ "$(printf '%s\n' "$profiles" | wc -l)" == 3 ]]
           [[ "$profiles" == *'#CI%20Primary%20%28Irancell%29'* && "$profiles" == *'#CI%20Primary%20%28MCI%29'* ]]
-          [[ "$profiles" == *'balance.atavix.invalid:1'* && "$profiles" == *'#ci-user-10%20GB'* ]]
+          [[ "$profiles" == *'balance.atavix.invalid:1'* && "$profiles" == *'#10%20of%2010%20GB'* ]]
           html=$(curl -fsS -H 'Accept: text/html' "$link")
-          [[ "$html" == *'Open in v2rayNG'* && "$html" == *'Copy profiles for v2rayN'* ]]
+          [[ "$html" == *'Import all profiles'* && "$html" == *'Copy all profiles'* ]]
           curl -fsS "$base/assets/subscription.css" -o /dev/null
           [[ "$(curl -fsS -H 'Accept: text/html' "$link?format=raw" | base64 --decode)" == "$profiles" ]]
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' "$base/balance")" == 404 ]]
@@ -79,9 +79,10 @@ jobs:
         if: matrix.database == 'sqlite'
         run: |
           set -euo pipefail
-          printf '%s\n' 2 18080 https://panel.example.com https://sub.example.com yes 127.0.0.1 18443 panel.example.com | sudo ./main configure
+          printf '%s\n' 2 18080 https://panel.example.com https://sub.example.com yes 127.0.0.1 18443 panel.example.com 18444 | sudo ./main configure
           curl -fsS http://127.0.0.1:18080/healthz -o /dev/null
           timeout 3 bash -c '</dev/tcp/127.0.0.1/18443'
+          timeout 3 bash -c '</dev/tcp/127.0.0.1/18444'
       - name: Show service logs on failure
         if: failure()
         run: timeout 5s sudo ./main logs || true

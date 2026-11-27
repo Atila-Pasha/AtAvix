@@ -19,7 +19,7 @@ func TestOperatorProfiles(t *testing.T) {
 	defer reg.Close()
 
 	base, _ := url.Parse("https://sub.example.org")
-	reality := &Reality{Public: "vpn.example.org:8443", ServerName: "panel.example.org"}
+	reality := &Reality{realityEndpoint: realityEndpoint{Public: "vpn.example.org:8443"}, ServerName: "panel.example.org"}
 	if err := reg.InitializeReality(ctx, reality); err != nil {
 		t.Fatal(err)
 	}
