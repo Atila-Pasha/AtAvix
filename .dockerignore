@@ -4,3 +4,5 @@
 !main.go
 !internal/
 !internal/**
+!LICENSES
+!LICENSES/mtg-multi.txt
