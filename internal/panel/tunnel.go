@@ -1,8 +1,10 @@
 package panel
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net"
@@ -18,12 +20,14 @@ import (
 )
 
 const (
-	PrimaryPath   = "/connect"
-	AlternatePath = "/fallback"
-	relayChunk    = 16 << 10
+	PrimaryPath             = "/connect"
+	AlternatePath           = "/fallback"
+	websocketEarlyDataLimit = 2048
+	relayChunk              = 64 << 10
 )
 
 var hostnameLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+var relayBuffers = sync.Pool{New: func() any { return new([relayChunk]byte) }}
 
 func subscriptionURL(base *url.URL, u User) string {
 	return base.JoinPath(u.Token.String()).String()
@@ -103,21 +107,40 @@ func (g *Gateway) release() {
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !websocket.IsWebSocketUpgrade(r) || r.Header.Get("Sec-WebSocket-Protocol") != "" {
+	if !websocket.IsWebSocketUpgrade(r) {
 		http.NotFound(w, r)
 		return
+	}
+	var earlyData []byte
+	var responseHeader http.Header
+	if protocols := r.Header.Values("Sec-WebSocket-Protocol"); len(protocols) != 0 {
+		if len(protocols) != 1 || len(protocols[0]) > base64.RawURLEncoding.EncodedLen(websocketEarlyDataLimit) {
+			http.NotFound(w, r)
+			return
+		}
+		var err error
+		earlyData, err = base64.RawURLEncoding.Strict().DecodeString(protocols[0])
+		if err != nil || len(earlyData) == 0 || earlyData[0] != 0 {
+			http.NotFound(w, r)
+			return
+		}
+		responseHeader = http.Header{"Sec-WebSocket-Protocol": {protocols[0]}}
 	}
 	if !g.reserve() {
 		http.Error(w, "Service busy", http.StatusServiceUnavailable)
 		return
 	}
 	defer g.release()
-	client, err := g.upgrader.Upgrade(w, r, nil)
+	client, err := g.upgrader.Upgrade(w, r, responseHeader)
 	if err != nil {
 		return
 	}
 	client.SetReadLimit(8 << 20)
-	g.tunnel(&wsStream{Conn: client})
+	stream := &wsStream{Conn: client}
+	if len(earlyData) != 0 {
+		stream.frame = bytes.NewReader(earlyData)
+	}
+	g.tunnel(stream)
 }
 
 // The raw listener accepts streams from Xray after it terminates REALITY.
@@ -152,7 +175,8 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	defer stopClient()
 
 	client.SetReadDeadline(time.Now().Add(10 * time.Second))
-	header, id, host, err := readVLESSHeader(client)
+	input := bufio.NewReader(client)
+	header, id, host, err := readVLESSHeader(input)
 	if err != nil {
 		return
 	}
@@ -182,7 +206,7 @@ func (g *Gateway) tunnel(client tunnelStream) {
 		g.relay(id, core, client, false)
 		cancel()
 	}()
-	if err := g.relay(id, client, core, true); err == io.EOF {
+	if err := g.relay(id, input, core, true); err == io.EOF {
 		// A TCP client may finish sending and still expect a reply.
 		if _, raw := client.(net.Conn); raw {
 			core.(*net.UnixConn).CloseWrite()
@@ -195,9 +219,10 @@ func (g *Gateway) tunnel(client tunnelStream) {
 }
 
 func (g *Gateway) relay(id uuid.UUID, source io.Reader, target tunnelStream, upload bool) error {
-	buffer := make([]byte, relayChunk)
+	buffer := relayBuffers.Get().(*[relayChunk]byte)
+	defer relayBuffers.Put(buffer)
 	for {
-		n, err := source.Read(buffer)
+		n, err := source.Read(buffer[:])
 		if n > 0 && !g.send(id, target, buffer[:n], upload) {
 			return io.ErrClosedPipe
 		}

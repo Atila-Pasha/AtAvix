@@ -147,6 +147,9 @@ func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User
 		transport := "WebSocket"
 		if endpoint.Scheme == "https" {
 			transport = "WebSocket + TLS"
+			if endpoint == base {
+				path += "?ed=" + strconv.Itoa(websocketEarlyDataLimit)
+			}
 		}
 		return connectionProfile{label, transport, profile(endpoint, u, path, label)}
 	}

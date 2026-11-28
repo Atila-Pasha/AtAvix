@@ -79,7 +79,7 @@ func TestSubscriptionAndAccounting(t *testing.T) {
 		for i, expectedPath := range []string{PrimaryPath, AlternatePath} {
 			q, err := url.Parse(profiles[i])
 			if err != nil || q.Scheme != "vless" || q.Host != "sub.example.org:443" ||
-				q.User.Username() != u.ID.String() || q.Query().Get("path") != expectedPath ||
+				q.User.Username() != u.ID.String() || q.Query().Get("path") != expectedPath+"?ed=2048" ||
 				q.Query().Get("security") != "tls" || q.Query().Get("sni") != "sub.example.org" {
 				t.Fatalf("invalid profile %d: %s", i, profiles[i])
 			}

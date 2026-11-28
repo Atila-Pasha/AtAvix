@@ -66,6 +66,8 @@ Automatic HTTPS renews certificates using the Caddy data volume. For certificate
 
 Enter the localhost port for the backend and the public HTTPS origins. Point your reverse proxy to `127.0.0.1:<port>`. Preserve the incoming `Host` and allow WebSocket upgrades on `/connect` and `/fallback`. Keep subscription responses uncached and exclude their URL paths from access logs.
 
+Refreshed WebSocket profiles on the default HTTPS proxy origin advertise `ed=2048`. Compatible clients can send the first VLESS bytes with the upgrade, saving a round trip. Keep `Sec-WebSocket-Protocol` in both directions and omit it from request and response logs because it carries connection credentials. [Xray WebSocket settings](https://xtls.github.io/en/config/transports/websocket.html)
+
 This example belongs inside the matching Nginx TLS server block. Configure a valid certificate for each public hostname.
 
 ```nginx

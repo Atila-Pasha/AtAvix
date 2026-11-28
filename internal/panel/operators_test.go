@@ -49,7 +49,7 @@ func TestOperatorProfiles(t *testing.T) {
 	profiles := subscriptionProfiles(reloaded, base, reality, account)
 	expected := []struct{ label, address, security, path string }{
 		{"Home + Studio (MCI)", "vpn.example.org:8443", "reality", ""},
-		{"Home + Studio (Irancell)", "sub.example.org:443", "tls", PrimaryPath},
+		{"Home + Studio (Irancell)", "sub.example.org:443", "tls", PrimaryPath + "?ed=2048"},
 		{"Home + Studio (Shatel)", "other.example.org:443", "tls", PrimaryPath},
 	}
 	if len(profiles) != len(expected) {
