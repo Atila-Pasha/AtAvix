@@ -46,7 +46,7 @@ func TestOperatorProfiles(t *testing.T) {
 	}
 	defer reloaded.Close()
 	account := User{ID: uuid.New(), Username: "alex", Remark: "Home + Studio", Quota: 10_000_000_000}
-	profiles := subscriptionProfiles(reloaded, base, reality, account)
+	profiles := subscriptionProfiles(reloaded, cfg, account)
 	expected := []struct{ label, address, security, path string }{
 		{"Home + Studio (MCI)", "vpn.example.org:8443", "reality", ""},
 		{"Home + Studio (Irancell)", "sub.example.org:443", "tls", PrimaryPath + "?ed=2048"},
@@ -65,13 +65,13 @@ func TestOperatorProfiles(t *testing.T) {
 			t.Fatalf("profile %d did not use the expected label, address and settings", index)
 		}
 	}
-	if withoutReality := subscriptionProfiles(reloaded, base, nil, account); len(withoutReality) != 2 {
+	if withoutReality := subscriptionProfiles(reloaded, Config{ProxyURL: base}, account); len(withoutReality) != 2 {
 		t.Fatal("disabled REALITY route remained exposed")
 	}
 	if err := reg.saveOperatorRoutes(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
-	if profiles := subscriptionProfiles(reg, base, reality, account); len(profiles) != 2 {
+	if profiles := subscriptionProfiles(reg, cfg, account); len(profiles) != 2 {
 		t.Fatal("clearing operator routes did not restore default profiles")
 	}
 }

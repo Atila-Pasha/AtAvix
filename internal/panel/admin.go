@@ -69,6 +69,8 @@ type pageData struct {
 	OperatorSaved                                                  bool
 	MaxOperatorRoutes                                              int
 	EmptyOperatorRoute                                             OperatorRoute
+	Nodes                                                          []Node
+	NodeToken, NodeSaved, LocalLocation                            string
 }
 
 type userRow struct {
@@ -97,6 +99,10 @@ func attachAdmin(mux *http.ServeMux, cfg Config, reg *Registry) {
 	mux.HandleFunc("POST /admin/users/{id}/delete", a.restrict(a.remove))
 	mux.HandleFunc("GET /admin/settings", a.restrict(a.settings))
 	mux.HandleFunc("POST /admin/settings/operators", a.restrict(a.saveOperators))
+	mux.HandleFunc("GET /admin/nodes", a.restrict(a.nodes))
+	mux.HandleFunc("POST /admin/nodes", a.restrict(a.saveNode))
+	mux.HandleFunc("POST /admin/nodes/{id}", a.restrict(a.saveNode))
+	mux.HandleFunc("POST /admin/nodes/{id}/delete", a.restrict(a.deleteNode))
 }
 
 func (a *admin) render(w http.ResponseWriter, status int, data pageData) {
@@ -437,4 +443,78 @@ func (a *admin) saveOperators(w http.ResponseWriter, r *http.Request) {
 
 func (u userRow) UsageLabel() string {
 	return fmt.Sprintf("%s used of %s", FormatBytes(u.Used), FormatBytes(u.Quota))
+}
+
+func (a *admin) nodesPage() pageData {
+	data := pageData{Page: "nodes", Title: "Servers", SubscriptionURL: a.cfg.SubscriptionURL.String(), Nodes: a.reg.Nodes()}
+	if a.cfg.LocalCountry != "" {
+		data.LocalLocation = countryLabel(a.cfg.LocalCountry)
+	}
+	if a.cfg.Reality != nil {
+		data.RealityEndpoint = a.cfg.Reality.Public
+	}
+	return data
+}
+
+func (a *admin) nodes(w http.ResponseWriter, r *http.Request) {
+	data := a.nodesPage()
+	data.NodeSaved = r.URL.Query().Get("saved")
+	a.render(w, http.StatusOK, data)
+}
+
+func (a *admin) saveNode(w http.ResponseWriter, r *http.Request) {
+	if !readForm(w, r) {
+		return
+	}
+	var id uuid.UUID
+	if raw := r.PathValue("id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil || parsed == uuid.Nil {
+			http.NotFound(w, r)
+			return
+		}
+		id = parsed
+	}
+	token, err := a.reg.saveNode(r.Context(), id, r.PostForm.Get("name"), r.PostForm.Get("country"), id == uuid.Nil || r.PostForm.Get("enabled") == "on")
+	if err == nil && token == "" {
+		http.Redirect(w, r, "/admin/nodes?saved=updated", http.StatusSeeOther)
+		return
+	}
+	data := a.nodesPage()
+	if err == nil {
+		data.NodeToken = token
+		a.render(w, http.StatusCreated, data)
+		return
+	}
+	switch {
+	case errors.Is(err, errNodeName), errors.Is(err, errNodeInput), errors.Is(err, errNodeLimit):
+		data.Error = err.Error()
+		a.render(w, http.StatusUnprocessableEntity, data)
+	case errors.Is(err, ErrMissing):
+		http.NotFound(w, r)
+	default:
+		slog.Error("Save server", "error", err)
+		data.Error = "The server could not be saved."
+		a.render(w, http.StatusInternalServerError, data)
+	}
+}
+
+func (a *admin) deleteNode(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil || id == uuid.Nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := a.reg.deleteNode(r.Context(), id); err != nil {
+		if errors.Is(err, ErrMissing) {
+			http.NotFound(w, r)
+			return
+		}
+		slog.Error("Remove server", "error", err)
+		data := a.nodesPage()
+		data.Error = "The server could not be removed."
+		a.render(w, http.StatusInternalServerError, data)
+		return
+	}
+	http.Redirect(w, r, "/admin/nodes?saved=removed", http.StatusSeeOther)
 }

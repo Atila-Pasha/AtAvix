@@ -140,6 +140,28 @@ Open **Settings → Operator profiles**. Test a route from a connection on the i
 
 Routes are emitted in the order shown in Settings. Up to 12 operator profiles can be published, plus the balance profile. Each operator route needs a distinct combination of transport and endpoint. Operator routes appear when their transport is enabled. With both REALITY listeners enabled, the default suggestions are MCI (TCP + REALITY), Irancell (WebSocket + TLS), and Rightel (XHTTP + REALITY). WebSocket-only installations publish MCI and Irancell over separate WebSocket paths. Treat the labels as starting points and test them from the intended networks.
 
+### Add VPS nodes
+
+1. In **Servers** on the main panel, enter a unique server name and a two-letter country code such as `DE` or `TR`. Copy the enrollment token when it appears.
+2. Copy the AtAvix and Xray executables to `/opt/atavix-node/current/` on the VPS. Use the Xray version pinned in the Dockerfile. Create `/etc/atavix-node/` and store the token in its `token` file. Generate a REALITY identity with `xray x25519` and save its private key in `reality-key`. Restrict both files to root.
+3. Create `/etc/atavix-node/node.env` with the node's public address, the main subscription HTTPS origin and a TLS cover site. Use a distinct, randomly generated 16-digit hexadecimal short ID for each node.
+
+   ```dotenv
+   NODE_PANEL_URL=https://sub.example.com
+   REALITY_PUBLIC=node.example.com:7443
+   REALITY_LISTEN=0.0.0.0:7443
+   REALITY_SERVER_NAME=cover.example.com
+   REALITY_TARGET=cover.example.com:443
+   NODE_REALITY_SHORT_ID=<output of openssl rand -hex 8>
+   XHTTP_PUBLIC=node.example.com:7444
+   XHTTP_LISTEN=0.0.0.0:7444
+   ```
+
+4. Install [the node service](deploy/atavix-node.service) in `/etc/systemd/system/`. Run `systemctl daemon-reload` and `systemctl enable --now atavix-node`. Allow TCP traffic to the configured node ports. Omit both `XHTTP` settings for a TCP-only node. AtAvix can also run the node in the foreground with `atavix node`.
+5. Check **Servers** for the Online status and refresh an existing subscription. Each online node adds profiles with its country flag, country name and server name. Set `NODE_LOCAL_COUNTRY` on the main panel (or `ATAVIX_NODE_LOCAL_COUNTRY` with Compose) to label its profiles too.
+
+With an external reverse proxy, forward `POST /_atavix/nodes/heartbeat` and WebSocket upgrades on `GET /_atavix/nodes/lease` from the subscription HTTPS origin to the panel. Preserve the Authorization header and exclude it from logs. Nodes connect to the panel over HTTPS for account authorization and usage reporting. Client traffic exits on the selected VPS. All nodes and the main panel use the same quota. A sudden node or control connection failure can lose usage recorded since the last checkpoint. Disabling a node removes it from refreshed subscriptions and closes its existing sessions on their next quota update.
+
 ### Telegram MTProto proxy
 
 1. During public setup, or with `sudo ./main configure`, enable **per-user Telegram MTProto proxies**.

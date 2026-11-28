@@ -59,7 +59,7 @@ func shareURI(address string, id uuid.UUID, query url.Values, name string) strin
 }
 
 type Gateway struct {
-	reg        *Registry
+	authorize  func(context.Context, uuid.UUID, string, context.CancelFunc) *tunnelAccount
 	internalID uuid.UUID
 	socket     string
 	upgrader   websocket.Upgrader
@@ -71,9 +71,24 @@ type Gateway struct {
 }
 
 func NewGateway(reg *Registry, socket string, internalID uuid.UUID) *Gateway {
+	return newGateway(socket, internalID, func(_ context.Context, id uuid.UUID, host string, cancel context.CancelFunc) *tunnelAccount {
+		release := reg.connect(id, cancel)
+		if release == nil {
+			return nil
+		}
+		return &tunnelAccount{
+			charge:    func(n int, upload bool) (int, bool) { return reg.charge(id, n, upload) },
+			exhausted: func() { reg.stopExhausted(id) },
+			close:     release,
+			observe:   func() { reg.observe(id, host) },
+		}
+	})
+}
+
+func newGateway(socket string, internalID uuid.UUID, authorize func(context.Context, uuid.UUID, string, context.CancelFunc) *tunnelAccount) *Gateway {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Gateway{
-		reg: reg, socket: socket, internalID: internalID,
+		authorize: authorize, socket: socket, internalID: internalID,
 		upgrader: websocket.Upgrader{HandshakeTimeout: 5 * time.Second},
 		ctx:      ctx, cancel: cancel, slots: make(chan struct{}, 1024),
 	}
@@ -167,6 +182,13 @@ type tunnelStream interface {
 	SetWriteDeadline(time.Time) error
 }
 
+type tunnelAccount struct {
+	charge    func(int, bool) (int, bool)
+	exhausted func()
+	close     func()
+	observe   func()
+}
+
 func (g *Gateway) tunnel(client tunnelStream) {
 	defer client.Close()
 	ctx, cancel := context.WithCancel(g.ctx)
@@ -180,11 +202,11 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	if err != nil {
 		return
 	}
-	release := g.reg.connect(id, cancel)
-	if release == nil {
+	account := g.authorize(ctx, id, host, cancel)
+	if account == nil {
 		return
 	}
-	defer release()
+	defer account.close()
 	client.SetReadDeadline(time.Time{})
 	dialer := net.Dialer{Timeout: 5 * time.Second}
 	core, err := dialer.DialContext(ctx, "unix", g.socket)
@@ -195,18 +217,20 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	stopCore := context.AfterFunc(ctx, func() { core.Close() })
 	defer stopCore()
 	copy(header[1:17], g.internalID[:])
-	if !g.send(id, core, header, true) {
+	if !account.send(core, header, true) {
 		return
 	}
-	g.reg.observe(id, host)
+	if account.observe != nil {
+		account.observe()
+	}
 
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		g.relay(id, core, client, false)
+		account.relay(core, client, false)
 		cancel()
 	}()
-	if err := g.relay(id, input, core, true); err == io.EOF {
+	if err := account.relay(input, core, true); err == io.EOF {
 		// A TCP client may finish sending and still expect a reply.
 		if _, raw := client.(net.Conn); raw {
 			core.(*net.UnixConn).CloseWrite()
@@ -218,12 +242,12 @@ func (g *Gateway) tunnel(client tunnelStream) {
 	<-finished
 }
 
-func (g *Gateway) relay(id uuid.UUID, source io.Reader, target tunnelStream, upload bool) error {
+func (a *tunnelAccount) relay(source io.Reader, target tunnelStream, upload bool) error {
 	buffer := relayBuffers.Get().(*[relayChunk]byte)
 	defer relayBuffers.Put(buffer)
 	for {
 		n, err := source.Read(buffer[:])
-		if n > 0 && !g.send(id, target, buffer[:n], upload) {
+		if n > 0 && !a.send(target, buffer[:n], upload) {
 			return io.ErrClosedPipe
 		}
 		if err != nil {
@@ -232,15 +256,15 @@ func (g *Gateway) relay(id uuid.UUID, source io.Reader, target tunnelStream, upl
 	}
 }
 
-func (g *Gateway) send(id uuid.UUID, target tunnelStream, payload []byte, upload bool) bool {
-	allowed, exhausted := g.reg.charge(id, len(payload), upload)
+func (a *tunnelAccount) send(target tunnelStream, payload []byte, upload bool) bool {
+	allowed, exhausted := a.charge(len(payload), upload)
 	if allowed == 0 {
 		return false
 	}
 	target.SetWriteDeadline(time.Now().Add(15 * time.Second))
 	_, err := target.Write(payload[:allowed])
 	if exhausted {
-		g.reg.stopExhausted(id)
+		a.exhausted()
 	}
 	return err == nil && !exhausted
 }

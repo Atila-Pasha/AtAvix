@@ -33,6 +33,7 @@
       <nav aria-label="Main navigation">
         <a href="/admin/" {{if eq .Page "dashboard"}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">▦</span>Overview</a>
         <a href="/admin/users" {{if or (eq .Page "users") (eq .Page "detail") (eq .Page "new")}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">◎</span>Users</a>
+        <a href="/admin/nodes" {{if eq .Page "nodes"}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">▤</span>Servers</a>
         <a href="/admin/settings" {{if eq .Page "settings"}}aria-current="page"{{end}}><span class="nav-icon" aria-hidden="true">⚙</span>Settings</a>
       </nav>
       <div class="account">
@@ -55,6 +56,8 @@
         </section>
       {{else if eq .Page "detail"}}
         {{template "detail" .}}
+      {{else if eq .Page "nodes"}}
+        {{template "nodes" .}}
       {{else}}
         <header class="page-heading">
           <div><h1>Settings</h1><p>Endpoints and storage for this installation.</p></div>
@@ -273,4 +276,56 @@
     <label>Public endpoint<input name="endpoint" value="{{.Endpoint}}" placeholder="Default endpoint" maxlength="300" aria-describedby="operator-hint"></label>
     <button class="icon-button" type="button" data-remove-operator aria-label="Remove operator route" title="Remove operator route">×</button>
   </div>
+{{end}}
+
+{{define "nodes"}}
+  <header class="page-heading">
+    <div><h1>Servers</h1><p>Manage VPS nodes published in user subscriptions.</p></div>
+  </header>
+  {{template "alert" .}}
+  {{if eq .NodeSaved "updated"}}<p role="status">Server updated.</p>{{end}}
+  {{if eq .NodeSaved "removed"}}<p role="status">Server removed.</p>{{end}}
+  <section class="panel form-panel">
+    <h2>{{if .LocalLocation}}{{.LocalLocation}} · {{end}}Main server</h2>
+    {{if .RealityEndpoint}}<p class="secondary">{{.RealityEndpoint}}</p>{{end}}
+  </section>
+  {{if .NodeToken}}
+    <section class="panel form-panel stack">
+      <h2>Connect the new server</h2>
+      <label>Panel origin<input readonly value="{{.SubscriptionURL}}"></label>
+      <label>Enrollment token<input id="node-enrollment-token" readonly value="{{.NodeToken}}" autocomplete="off"></label>
+      <p class="secondary">Copy this token into the token file on the VPS. It appears once. Start the AtAvix node service to publish its connection profiles.</p>
+    </section>
+  {{end}}
+  <section class="panel form-panel">
+    <form class="stack" method="post" action="/admin/nodes">
+      <h2>Add server</h2>
+      <label>Server name<input name="name" maxlength="40" required placeholder="Frankfurt 2"></label>
+      <label>Country code<input name="country" maxlength="2" pattern="[A-Za-z]{2}" required placeholder="DE"></label>
+      <div><button class="button primary" type="submit">Create enrollment token</button></div>
+    </form>
+  </section>
+  {{range .Nodes}}
+    <section class="panel form-panel stack">
+      <div>
+        <h2>{{.Location}} · {{.Name}}</h2>
+        <p class="secondary">{{.Status}}{{if .Address.TCP}} · {{.Address.TCP}}{{end}}{{if .Address.XHTTP}} · {{.Address.XHTTP}}{{end}}</p>
+      </div>
+      <form class="stack" method="post" action="/admin/nodes/{{.ID}}">
+        <label>Server name<input name="name" maxlength="40" required value="{{.Name}}"></label>
+        <label>Country code<input name="country" maxlength="2" pattern="[A-Za-z]{2}" required value="{{.Country}}"></label>
+        <label class="toggle-row"><span><strong>Enable server</strong><small>Publish its profiles and allow connections.</small></span><input class="toggle" type="checkbox" name="enabled" {{if .Enabled}}checked{{end}}></label>
+        <div><button class="button" type="submit">Save server</button></div>
+      </form>
+      <div><a class="button danger-button" href="#remove-node-{{.ID}}" data-dialog="remove-node-{{.ID}}">Remove server</a></div>
+      <dialog id="remove-node-{{.ID}}" class="modal">
+        <form method="dialog" class="modal-close"><button class="icon-button" aria-label="Close">×</button></form>
+        <h2>Remove {{.Name}}</h2>
+        <p class="secondary">This revokes the enrollment token and removes the server from subscriptions.</p>
+        <form class="form-actions" method="post" action="/admin/nodes/{{.ID}}/delete">
+          <button class="button danger-button" type="submit">Remove server</button>
+        </form>
+      </dialog>
+    </section>
+  {{end}}
 {{end}}

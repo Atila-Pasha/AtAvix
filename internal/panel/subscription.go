@@ -71,7 +71,7 @@ func serveSubscription(reg *Registry, cfg Config) http.HandlerFunc {
 			return
 		}
 
-		profiles := subscriptionProfiles(reg, cfg.ProxyURL, cfg.Reality, u)
+		profiles := append(subscriptionProfiles(reg, cfg, u), reg.nodeProfiles(u)...)
 		lines := make([]string, 0, len(profiles)+1)
 		for _, profile := range profiles {
 			lines = append(lines, profile.URI)

@@ -17,6 +17,7 @@ type Config struct {
 	PasswordHash                              []byte
 	Reality                                   *Reality
 	Telegram                                  *Telegram
+	LocalCountry                              string
 }
 
 func ReadConfig() (Config, error) {
@@ -26,6 +27,13 @@ func ReadConfig() (Config, error) {
 		Admin: env("ADMIN_USERNAME", "admin"), Database: env("DATABASE_URL", "atavix.sqlite"),
 	}
 	cfg.Driver = "sqlite3"
+	if value := os.Getenv("NODE_LOCAL_COUNTRY"); value != "" {
+		code, ok := countryCode(value)
+		if !ok {
+			return cfg, errors.New("NODE_LOCAL_COUNTRY must be a two-letter country code")
+		}
+		cfg.LocalCountry = code
+	}
 	if strings.HasPrefix(cfg.Database, "postgres://") || strings.HasPrefix(cfg.Database, "postgresql://") {
 		cfg.Driver = "pgx"
 	}

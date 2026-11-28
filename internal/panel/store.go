@@ -68,6 +68,7 @@ func (in *UserInput) validate() error {
 type userState struct {
 	user      User
 	persisted int64
+	reserved  int64
 	domains   map[string]int64
 	tunnels   map[uint64]func()
 }
@@ -88,6 +89,7 @@ type Registry struct {
 	accountRevision uint64
 	lastPrune       time.Time
 	operatorRoutes  []OperatorRoute
+	nodes           []Node
 }
 
 func OpenRegistry(ctx context.Context, driver, dsn string) (*Registry, error) {
@@ -108,6 +110,10 @@ func OpenRegistry(ctx context.Context, driver, dsn string) (*Registry, error) {
 		return nil, err
 	}
 	if err := reg.loadOperatorRoutes(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := reg.loadNodes(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -293,7 +299,7 @@ func (r *Registry) charge(id uuid.UUID, size int, upload bool) (granted int, exh
 	if state == nil || !state.user.Enabled {
 		return 0, false
 	}
-	granted = int(min(int64(size), state.user.Remaining()))
+	granted = int(min(int64(size), max(0, state.user.Remaining()-state.reserved)))
 	state.user.Used += int64(granted)
 	if upload {
 		state.user.Uploaded += int64(granted)

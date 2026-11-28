@@ -140,8 +140,13 @@ type connectionProfile struct {
 	Name, Transport, URI string
 }
 
-func subscriptionProfiles(reg *Registry, base *url.URL, reality *Reality, u User) []connectionProfile {
-	name := func(operator string) string { return u.Remark + " (" + operator + ")" }
+func subscriptionProfiles(reg *Registry, cfg Config, u User) []connectionProfile {
+	base, reality := cfg.ProxyURL, cfg.Reality
+	remark := u.Remark
+	if cfg.LocalCountry != "" {
+		remark = countryLabel(cfg.LocalCountry) + " · " + remark
+	}
+	name := func(operator string) string { return remark + " (" + operator + ")" }
 	websocket := func(endpoint *url.URL, path, operator string) connectionProfile {
 		label := name(operator)
 		transport := "WebSocket"

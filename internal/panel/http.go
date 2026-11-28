@@ -8,6 +8,7 @@ import (
 func NewHandler(cfg Config, reg *Registry, gateway *Gateway) http.Handler {
 	mux := http.NewServeMux()
 	attachAdmin(mux, cfg, reg)
+	attachNodeControl(mux, reg)
 	mux.Handle("GET "+PrimaryPath, gateway)
 	mux.Handle("GET "+AlternatePath, gateway)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

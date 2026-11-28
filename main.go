@@ -17,6 +17,13 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) == 2 && os.Args[1] == "node" {
+		if err := panel.RunNode(ctx); err != nil {
+			slog.Error("AtAvix node stopped", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(ctx); err != nil {
 		slog.Error("AtAvix stopped", "error", err)
 		os.Exit(1)

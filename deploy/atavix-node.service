@@ -1,0 +1,30 @@
+[Unit]
+Description=AtAvix VPS proxy node
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+EnvironmentFile=/etc/atavix-node/node.env
+LoadCredential=node-token:/etc/atavix-node/token
+LoadCredential=reality-key:/etc/atavix-node/reality-key
+Environment=NODE_TOKEN_FILE=%d/node-token
+Environment=NODE_REALITY_KEY_FILE=%d/reality-key
+Environment=XRAY_BIN=/opt/atavix-node/current/xray
+ExecStart=/opt/atavix-node/current/atavix node
+Restart=on-failure
+RestartSec=4s
+TimeoutStopSec=25s
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

@@ -21,6 +21,7 @@ services:
       SUBSCRIPTION_URL: ${ATAVIX_SUB_URL:?Run ./main first}
       PROXY_URL: ${ATAVIX_PROXY_URL:?Run ./main first}
       TRUST_PROXY: ${ATAVIX_TRUST_PROXY:-false}
+      NODE_LOCAL_COUNTRY: ${ATAVIX_NODE_LOCAL_COUNTRY:-}
     volumes:
       - atavix-data:/data
       - type: bind
